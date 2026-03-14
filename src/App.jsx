@@ -272,23 +272,18 @@ function getCycleInfoForDate(date, cycleStartDay) {
   }
 
   const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-
   const startDay = Math.min(safeDay, daysInMonth(startYear, startMonth));
   const endDay = Math.min(safeDay, daysInMonth(endYear, endMonth));
 
-  const start = new Date(startYear, startMonth, startDay);
-  const end = new Date(endYear, endMonth, endDay);
-
   return {
-    start,
-    end,
+    start: new Date(startYear, startMonth, startDay),
+    end: new Date(endYear, endMonth, endDay),
     label: `${monthNames[startMonth]}${String(startYear).slice(-2)}-${monthNames[endMonth]}${String(endYear).slice(-2)}`,
   };
 }
 
 function normalizeTipo(value) {
   const raw = String(value || "").trim().toLowerCase();
-
   if (!raw) return "gasto";
   if (raw.includes("ingreso")) return "ingreso";
   if (raw.includes("pago") && raw.includes("deuda")) return "pago_deuda";
@@ -438,9 +433,7 @@ async function gFetch(url, token, opts = {}) {
 
 async function writeRange(sheetId, range, values, token) {
   return gFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(
-      range
-    )}?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     token,
     {
       method: "PUT",
@@ -451,9 +444,7 @@ async function writeRange(sheetId, range, values, token) {
 
 async function appendRow(sheetId, tab, row, token) {
   return gFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(
-      `${tab}!A1`
-    )}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${tab}!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     token,
     {
       method: "POST",
@@ -589,7 +580,7 @@ async function findManagedSheet(token) {
       const config = readConfig(configRows);
       if (config.appMarker === CONFIG.APP_MARKER) return file.id;
     } catch {
-      // ignore candidate
+      // ignore
     }
   }
 
@@ -599,7 +590,7 @@ async function findManagedSheet(token) {
 // ─────────────────────────────────────────────────────────────
 // SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────
-function EmptyState({ title, subtitle }) {
+function EmptyState({ title, subtitle, action }) {
   return (
     <div
       style={{
@@ -612,6 +603,7 @@ function EmptyState({ title, subtitle }) {
     >
       <div style={{ fontSize: 14, color: T.text, marginBottom: 6, fontWeight: 600 }}>{title}</div>
       <div style={{ fontSize: 13 }}>{subtitle}</div>
+      {action && <div style={{ marginTop: "1rem" }}>{action}</div>}
     </div>
   );
 }
@@ -684,6 +676,53 @@ function StatCard({ label, value, sub, color, icon }) {
   );
 }
 
+function SectionHeader({ title, subtitle, action, isMobile }) {
+  return (
+    <div
+      style={{
+        padding: isMobile ? "1rem" : "1.25rem 1.5rem",
+        borderBottom: `1px solid ${T.border}`,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: isMobile ? "stretch" : "center",
+        flexDirection: isMobile ? "column" : "row",
+        gap: "0.75rem",
+      }}
+    >
+      <div>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1rem" }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: T.muted2, marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function SecondaryButton({ children, onClick, fullWidth = false }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: fullWidth ? "100%" : "auto",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.45rem",
+        background: T.card2,
+        border: `1px solid ${T.border}`,
+        color: T.text,
+        borderRadius: 10,
+        padding: "0.7rem 0.95rem",
+        cursor: "pointer",
+        fontSize: 12.5,
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
@@ -713,6 +752,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function App() {
   const { isMobile, isTablet } = useViewport();
   const tokenClientRef = useRef(null);
+  const actionMenuRef = useRef(null);
 
   const [auth, setAuth] = useState({ token: null, expiresAt: 0 });
   const [sheetId, setSheetId] = useState(null);
@@ -733,12 +773,35 @@ export default function App() {
   const [ahorrosData, setAhorrosData] = useState(DEMO.ahorros);
   const [deudasData, setDeudasData] = useState(DEMO.deudas);
 
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState("gasto");
-  const [modalForm, setModalForm] = useState({
+  const [showMovementModal, setShowMovementModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showDebtModal, setShowDebtModal] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+
+  const [movementType, setMovementType] = useState("gasto");
+  const [movementForm, setMovementForm] = useState({
     comercio: "",
     monto: "",
     moneda: "CRC",
+    notas: "",
+  });
+
+  const [accountForm, setAccountForm] = useState({
+    nombre: "",
+    moneda: "CRC",
+    saldoInicial: "",
+    notas: "",
+  });
+
+  const [debtForm, setDebtForm] = useState({
+    nombre: "",
+    entidad: "",
+    moneda: "CRC",
+    montoOriginal: "",
+    saldoActual: "",
+    cuotaMensual: "",
+    tasa: "",
+    plazoRestante: "",
     notas: "",
   });
 
@@ -755,6 +818,7 @@ export default function App() {
     script.defer = true;
     script.onload = () => setGsLoaded(true);
     document.head.appendChild(script);
+
     return () => {
       try {
         document.head.removeChild(script);
@@ -763,6 +827,20 @@ export default function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target)) {
+        setShowActionMenu(false);
+      }
+    };
+
+    if (showActionMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showActionMenu]);
 
   const hasValidToken = () => auth.token && Date.now() < auth.expiresAt - 60_000;
 
@@ -790,6 +868,8 @@ export default function App() {
           await loadFinanceData(accessToken);
         } catch (e) {
           setError(e.message || "No se pudo cargar la información.");
+          setLoading(false);
+          setSetupStatus("");
         }
       },
     });
@@ -883,16 +963,53 @@ export default function App() {
     setSetupStatus("");
   };
 
-  const handleRegistrar = async () => {
+  async function reloadTransactions() {
+    const txnRows = await fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token);
+    const parsed = parseTransacciones(txnRows, cycleStartDay);
+    setTxns(parsed);
+  }
+
+  async function reloadAccounts() {
+    const cuentasRows = await fetchSheetData(sheetId, CONFIG.TABS.cuentas, auth.token);
+    const cuentasParsed = cuentasRows
+      .slice(1)
+      .filter((r) => r?.[1] && r?.[2] && r?.[3] !== undefined)
+      .map((r) => ({
+        cuenta: r[1],
+        moneda: String(r[2] || "CRC").toUpperCase(),
+        saldo: parseMonto(r[3]),
+      }));
+
+    setAhorrosData(cuentasParsed);
+  }
+
+  async function reloadDebts() {
+    const prestamosRows = await fetchSheetData(sheetId, CONFIG.TABS.prestamos, auth.token);
+    const prestamosParsed = prestamosRows
+      .slice(1)
+      .filter((r) => r?.[1] && r?.[5] !== undefined)
+      .map((r) => ({
+        nombre: r[1],
+        entidad: r[2] || "",
+        moneda: String(r[3] || "CRC").toUpperCase(),
+        saldo: parseMonto(r[5]),
+        cuota: parseMonto(r[6]),
+        tasa: parseFloat(String(r[7] || "0").replace(",", ".")) || 0,
+        meses: parseInt(r[8] || "0", 10) || 0,
+      }));
+
+    setDeudasData(prestamosParsed);
+  }
+
+  const handleRegistrarMovimiento = async () => {
     if (!hasValidToken() || !sheetId) {
       setError("Tu sesión con Google expiró. Tocá “Conectar / renovar Google” y probá de nuevo.");
       return;
     }
 
-    if (!modalForm.comercio || !modalForm.monto) return;
+    if (!movementForm.comercio || !movementForm.monto) return;
 
     const now = new Date();
-    const tipo = modalType;
     const fecha = formatDateDDMMYYYY(now);
     const hora = now.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" });
     const ciclo = getCycleInfoForDate(now, cycleStartDay).label;
@@ -900,30 +1017,118 @@ export default function App() {
     const row = [
       fecha,
       hora,
-      modalForm.comercio,
+      movementForm.comercio,
       "Manual",
-      modalForm.moneda,
-      modalForm.monto,
+      movementForm.moneda,
+      movementForm.monto,
       ciclo,
       new Date().toISOString(),
-      tipo,
-      modalForm.notas,
+      movementType,
+      movementForm.notas,
     ];
 
     try {
       setLoading(true);
       setSetupStatus("Guardando movimiento...");
       await appendRow(sheetId, CONFIG.TABS.transacciones, row, auth.token);
+      await reloadTransactions();
 
-      const txnRows = await fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token);
-      const parsed = parseTransacciones(txnRows, cycleStartDay);
-
-      setTxns(parsed);
-      setShowModal(false);
-      setModalForm({ comercio: "", monto: "", moneda: "CRC", notas: "" });
-      setModalType("gasto");
+      setShowMovementModal(false);
+      setMovementType("gasto");
+      setMovementForm({
+        comercio: "",
+        monto: "",
+        moneda: "CRC",
+        notas: "",
+      });
     } catch (e) {
-      setError(`Error al registrar: ${e.message}`);
+      setError(`Error al registrar movimiento: ${e.message}`);
+    } finally {
+      setLoading(false);
+      setSetupStatus("");
+    }
+  };
+
+  const handleRegistrarCuenta = async () => {
+    if (!hasValidToken() || !sheetId) {
+      setError("Tu sesión con Google expiró. Volvé a conectar Google.");
+      return;
+    }
+
+    if (!accountForm.nombre || !accountForm.saldoInicial) return;
+
+    try {
+      setLoading(true);
+      setSetupStatus("Guardando cuenta...");
+
+      const row = [
+        `CTA-${Date.now()}`,
+        accountForm.nombre,
+        accountForm.moneda,
+        accountForm.saldoInicial,
+        accountForm.notas,
+      ];
+
+      await appendRow(sheetId, CONFIG.TABS.cuentas, row, auth.token);
+      await reloadAccounts();
+
+      setShowAccountModal(false);
+      setAccountForm({
+        nombre: "",
+        moneda: "CRC",
+        saldoInicial: "",
+        notas: "",
+      });
+    } catch (e) {
+      setError(`Error al registrar cuenta: ${e.message}`);
+    } finally {
+      setLoading(false);
+      setSetupStatus("");
+    }
+  };
+
+  const handleRegistrarDeuda = async () => {
+    if (!hasValidToken() || !sheetId) {
+      setError("Tu sesión con Google expiró. Volvé a conectar Google.");
+      return;
+    }
+
+    if (!debtForm.nombre || !debtForm.saldoActual) return;
+
+    try {
+      setLoading(true);
+      setSetupStatus("Guardando deuda...");
+
+      const row = [
+        `PRE-${Date.now()}`,
+        debtForm.nombre,
+        debtForm.entidad,
+        debtForm.moneda,
+        debtForm.montoOriginal,
+        debtForm.saldoActual,
+        debtForm.cuotaMensual,
+        debtForm.tasa,
+        debtForm.plazoRestante,
+        debtForm.notas,
+      ];
+
+      await appendRow(sheetId, CONFIG.TABS.prestamos, row, auth.token);
+      await reloadDebts();
+
+      setShowDebtModal(false);
+      setDebtForm({
+        nombre: "",
+        entidad: "",
+        moneda: "CRC",
+        montoOriginal: "",
+        saldoActual: "",
+        cuotaMensual: "",
+        tasa: "",
+        plazoRestante: "",
+        notas: "",
+      });
+    } catch (e) {
+      setError(`Error al registrar deuda: ${e.message}`);
     } finally {
       setLoading(false);
       setSetupStatus("");
@@ -1005,6 +1210,21 @@ export default function App() {
     { id: "savings", label: "Ahorros", icon: "◉" },
     { id: "debts", label: "Deudas", icon: "◫" },
   ];
+
+  const openMovementModal = () => {
+    setShowActionMenu(false);
+    setShowMovementModal(true);
+  };
+
+  const openAccountModal = () => {
+    setShowActionMenu(false);
+    setShowAccountModal(true);
+  };
+
+  const openDebtModal = () => {
+    setShowActionMenu(false);
+    setShowDebtModal(true);
+  };
 
   return (
     <div
@@ -1333,12 +1553,7 @@ export default function App() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fill: T.muted, fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
+                    <XAxis dataKey="day" tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis
                       tick={{ fill: T.muted, fontSize: 10 }}
                       axisLine={false}
@@ -1538,65 +1753,19 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            <div
-              style={{
-                padding: isMobile ? "1rem" : "1.25rem 1.5rem",
-                borderBottom: `1px solid ${T.border}`,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: isMobile ? "flex-start" : "center",
-                flexDirection: isMobile ? "column" : "row",
-                gap: "0.75rem",
-              }}
-            >
-              <div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1rem" }}>Movimientos del Ciclo</div>
-                <div style={{ fontSize: 12, color: T.muted2, marginTop: 2 }}>
-                  {txns.length} movimientos · {ACTIVE_CYCLE}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "0.45rem",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    padding: "0.3rem 0.55rem",
-                    borderRadius: 20,
-                    background: T.roseDim,
-                    border: `1px solid ${T.rose}30`,
-                    color: T.rose,
-                    fontFamily: "'DM Mono',monospace",
-                  }}
-                >
-                  Gastos {fmtCRC(totalGastosCRC)}
-                </span>
-                <span
-                  style={{
-                    fontSize: 11,
-                    padding: "0.3rem 0.55rem",
-                    borderRadius: 20,
-                    background: T.emeraldDim,
-                    border: `1px solid ${T.emerald}30`,
-                    color: T.emerald,
-                    fontFamily: "'DM Mono',monospace",
-                  }}
-                >
-                  Ingresos {fmtCRC(totalIngresosCRC)}
-                </span>
-              </div>
-            </div>
+            <SectionHeader
+              title="Movimientos del Ciclo"
+              subtitle={`${txns.length} movimientos · ${ACTIVE_CYCLE}`}
+              isMobile={isMobile}
+              action={<SecondaryButton onClick={openMovementModal}>＋ Agregar movimiento</SecondaryButton>}
+            />
 
             {txns.length === 0 ? (
               <div style={{ padding: isMobile ? "1rem" : "1.5rem" }}>
                 <EmptyState
                   title="No hay movimientos en este ciclo"
                   subtitle="Registrá uno manual o importá datos al Sheet."
+                  action={<SecondaryButton onClick={openMovementModal}>＋ Agregar movimiento</SecondaryButton>}
                 />
               </div>
             ) : isMobile ? (
@@ -1744,10 +1913,7 @@ export default function App() {
                       const typeMeta = getTypeMeta(t.tipo);
 
                       return (
-                        <tr
-                          key={i}
-                          style={{ borderBottom: `1px solid ${T.border}` }}
-                        >
+                        <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
                           <td
                             style={{
                               padding: "0.85rem 1.25rem",
@@ -1882,11 +2048,12 @@ export default function App() {
                   overflow: "hidden",
                 }}
               >
-                <div style={{ padding: isMobile ? "1rem" : "1.25rem 1.5rem", borderBottom: `1px solid ${T.border}` }}>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1rem" }}>
-                    Saldo por Cuenta
-                  </div>
-                </div>
+                <SectionHeader
+                  title="Saldo por Cuenta"
+                  subtitle={`${ahorros.length} cuentas cargadas`}
+                  isMobile={isMobile}
+                  action={<SecondaryButton onClick={openAccountModal}>＋ Agregar cuenta</SecondaryButton>}
+                />
 
                 {ahorros.map((a, i) => {
                   const totalBase = a.moneda === "CRC" ? totalAhorrosCRC : totalAhorrosUSD;
@@ -1955,7 +2122,8 @@ export default function App() {
             ) : (
               <EmptyState
                 title="No hay cuentas cargadas"
-                subtitle="Agregá filas en la pestaña Cuentas de tu Sheet."
+                subtitle="Agregá una cuenta desde aquí y se guardará en la pestaña Cuentas de tu Google Sheet."
+                action={<SecondaryButton onClick={openAccountModal}>＋ Agregar cuenta</SecondaryButton>}
               />
             )}
           </div>
@@ -1989,6 +2157,10 @@ export default function App() {
 
             {deudas.length ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <SecondaryButton onClick={openDebtModal}>＋ Agregar deuda</SecondaryButton>
+                </div>
+
                 {deudas.map((d, i) => {
                   const totalBase = d.moneda === "CRC" ? totalDeudaCRC : totalDeudaUSD;
                   const progPct = totalBase > 0 ? Math.round((d.saldo / totalBase) * 100) : 0;
@@ -2074,76 +2246,91 @@ export default function App() {
             ) : (
               <EmptyState
                 title="No hay deudas cargadas"
-                subtitle="Agregá filas en la pestaña Préstamos de tu Sheet."
+                subtitle="Agregá una deuda desde aquí y se guardará en la pestaña Préstamos de tu Google Sheet."
+                action={<SecondaryButton onClick={openDebtModal}>＋ Agregar deuda</SecondaryButton>}
               />
             )}
           </div>
         )}
       </div>
 
-      {/* FAB */}
+      {/* FAB + ACTION MENU */}
       {!isDemo && (
-        <button
-          onClick={() => setShowModal(true)}
+        <div
+          ref={actionMenuRef}
           style={{
             position: "fixed",
             bottom: isMobile ? "1rem" : "2rem",
             right: isMobile ? "1rem" : "2rem",
-            zIndex: 100,
-            width: isMobile ? 52 : 56,
-            height: isMobile ? 52 : 56,
-            borderRadius: "50%",
-            background: `linear-gradient(135deg, ${T.emerald}, ${T.sapphire})`,
-            border: "none",
-            color: "#fff",
-            fontSize: 26,
-            cursor: "pointer",
-            boxShadow: `0 4px 24px ${T.emerald}40`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            zIndex: 120,
           }}
-          title="Registrar movimiento"
         >
-          +
-        </button>
-      )}
-
-      {/* MODAL */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 200,
-            background: "rgba(0,0,0,0.72)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "1rem",
-          }}
-          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
-        >
-          <div
-            style={{
-              background: T.card,
-              border: `1px solid ${T.border}`,
-              borderRadius: 20,
-              padding: isMobile ? "1rem" : "1.5rem",
-              width: "100%",
-              maxWidth: 430,
-            }}
-          >
+          {showActionMenu && (
             <div
               style={{
-                fontFamily: "'Syne',sans-serif",
-                fontWeight: 700,
-                fontSize: "1.08rem",
-                marginBottom: "1rem",
+                position: "absolute",
+                right: 0,
+                bottom: isMobile ? 62 : 66,
+                background: T.card,
+                border: `1px solid ${T.border}`,
+                borderRadius: 14,
+                padding: "0.45rem",
+                minWidth: isMobile ? 190 : 220,
+                boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
               }}
             >
-              Registrar Movimiento
+              <button
+                onClick={openMovementModal}
+                style={fabMenuButtonStyle}
+              >
+                💸 Agregar movimiento
+              </button>
+              <button
+                onClick={openAccountModal}
+                style={fabMenuButtonStyle}
+              >
+                ◉ Agregar cuenta
+              </button>
+              <button
+                onClick={openDebtModal}
+                style={fabMenuButtonStyle}
+              >
+                ◫ Agregar deuda
+              </button>
             </div>
+          )}
+
+          <button
+            onClick={() => setShowActionMenu((v) => !v)}
+            style={{
+              width: isMobile ? 52 : 56,
+              height: isMobile ? 52 : 56,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${T.emerald}, ${T.sapphire})`,
+              border: "none",
+              color: "#fff",
+              fontSize: 26,
+              cursor: "pointer",
+              boxShadow: `0 4px 24px ${T.emerald}40`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title="Agregar"
+          >
+            +
+          </button>
+        </div>
+      )}
+
+      {/* MOVEMENT MODAL */}
+      {showMovementModal && (
+        <div
+          style={modalBackdropStyle}
+          onClick={(e) => e.target === e.currentTarget && setShowMovementModal(false)}
+        >
+          <div style={modalCardStyle(isMobile)}>
+            <div style={modalTitleStyle}>Registrar Movimiento</div>
 
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
               {[
@@ -2151,13 +2338,13 @@ export default function App() {
                 ["ingreso", "💰 Ingreso"],
                 ["pago_deuda", "🏦 Pago deuda"],
               ].map(([type, label]) => {
-                const active = modalType === type;
+                const active = movementType === type;
                 const typeMeta = getTypeMeta(type);
 
                 return (
                   <button
                     key={type}
-                    onClick={() => setModalType(type)}
+                    onClick={() => setMovementType(type)}
                     style={{
                       flex: isMobile ? "1 1 100%" : 1,
                       padding: "0.6rem",
@@ -2182,70 +2369,33 @@ export default function App() {
               { key: "notas", label: "Notas (opcional)", placeholder: "Detalle adicional" },
             ].map(({ key, label, placeholder, type }) => (
               <div key={key} style={{ marginBottom: "1rem" }}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: T.muted,
-                    fontFamily: "'DM Mono',monospace",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {label}
-                </label>
-
+                <label style={fieldLabelStyle}>{label}</label>
                 <input
                   type={type || "text"}
-                  value={modalForm[key]}
-                  onChange={(e) => setModalForm((f) => ({ ...f, [key]: e.target.value }))}
+                  value={movementForm[key]}
+                  onChange={(e) => setMovementForm((f) => ({ ...f, [key]: e.target.value }))}
                   placeholder={placeholder}
-                  style={{
-                    width: "100%",
-                    background: T.card2,
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 10,
-                    padding: "0.75rem 0.95rem",
-                    color: T.text,
-                    fontSize: 13.5,
-                    outline: "none",
-                    fontFamily: "'DM Sans',sans-serif",
-                    boxSizing: "border-box",
-                  }}
+                  style={fieldInputStyle}
                 />
               </div>
             ))}
 
             <div style={{ marginBottom: "1.25rem" }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: T.muted,
-                  fontFamily: "'DM Mono',monospace",
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  display: "block",
-                  marginBottom: 6,
-                }}
-              >
-                Moneda
-              </label>
-
+              <label style={fieldLabelStyle}>Moneda</label>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 {["CRC", "USD"].map((m) => (
                   <button
                     key={m}
-                    onClick={() => setModalForm((f) => ({ ...f, moneda: m }))}
+                    onClick={() => setMovementForm((f) => ({ ...f, moneda: m }))}
                     style={{
                       padding: "0.55rem 1.25rem",
                       borderRadius: 10,
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: 600,
-                      background: modalForm.moneda === m ? T.emeraldDim : "transparent",
-                      border: `1px solid ${modalForm.moneda === m ? `${T.emerald}50` : T.border}`,
-                      color: modalForm.moneda === m ? T.emerald : T.muted2,
+                      background: movementForm.moneda === m ? T.emeraldDim : "transparent",
+                      border: `1px solid ${movementForm.moneda === m ? `${T.emerald}50` : T.border}`,
+                      color: movementForm.moneda === m ? T.emerald : T.muted2,
                     }}
                   >
                     {m}
@@ -2255,43 +2405,152 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  flex: 1,
-                  padding: "0.8rem",
-                  borderRadius: 12,
-                  background: "transparent",
-                  border: `1px solid ${T.border}`,
-                  color: T.muted2,
-                  cursor: "pointer",
-                  fontSize: 13,
-                }}
-              >
+              <button onClick={() => setShowMovementModal(false)} style={cancelButtonStyle}>
                 Cancelar
               </button>
-
               <button
-                onClick={handleRegistrar}
-                disabled={!modalForm.comercio || !modalForm.monto}
-                style={{
-                  flex: 1.4,
-                  padding: "0.8rem",
-                  borderRadius: 12,
-                  cursor: modalForm.comercio && modalForm.monto ? "pointer" : "default",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background:
-                    modalForm.comercio && modalForm.monto
-                      ? `linear-gradient(135deg, ${T.emerald}30, ${T.sapphire}30)`
-                      : "transparent",
-                  border: `1px solid ${
-                    modalForm.comercio && modalForm.monto ? `${T.emerald}50` : T.border
-                  }`,
-                  color: modalForm.comercio && modalForm.monto ? T.emerald : T.muted,
-                }}
+                onClick={handleRegistrarMovimiento}
+                disabled={!movementForm.comercio || !movementForm.monto}
+                style={primaryButtonStyle(!!movementForm.comercio && !!movementForm.monto)}
               >
                 Registrar →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACCOUNT MODAL */}
+      {showAccountModal && (
+        <div
+          style={modalBackdropStyle}
+          onClick={(e) => e.target === e.currentTarget && setShowAccountModal(false)}
+        >
+          <div style={modalCardStyle(isMobile)}>
+            <div style={modalTitleStyle}>Agregar Cuenta</div>
+
+            {[
+              { key: "nombre", label: "Nombre de la Cuenta", placeholder: "Ej: Davivienda Colones" },
+              { key: "saldoInicial", label: "Saldo Inicial", placeholder: "Ej: 150000", type: "number" },
+              { key: "notas", label: "Notas (opcional)", placeholder: "Detalle adicional" },
+            ].map(({ key, label, placeholder, type }) => (
+              <div key={key} style={{ marginBottom: "1rem" }}>
+                <label style={fieldLabelStyle}>{label}</label>
+                <input
+                  type={type || "text"}
+                  value={accountForm[key]}
+                  onChange={(e) => setAccountForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  style={fieldInputStyle}
+                />
+              </div>
+            ))}
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={fieldLabelStyle}>Moneda</label>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {["CRC", "USD"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setAccountForm((f) => ({ ...f, moneda: m }))}
+                    style={{
+                      padding: "0.55rem 1.25rem",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: accountForm.moneda === m ? T.emeraldDim : "transparent",
+                      border: `1px solid ${accountForm.moneda === m ? `${T.emerald}50` : T.border}`,
+                      color: accountForm.moneda === m ? T.emerald : T.muted2,
+                    }}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
+              <button onClick={() => setShowAccountModal(false)} style={cancelButtonStyle}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleRegistrarCuenta}
+                disabled={!accountForm.nombre || !accountForm.saldoInicial}
+                style={primaryButtonStyle(!!accountForm.nombre && !!accountForm.saldoInicial)}
+              >
+                Guardar cuenta →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEBT MODAL */}
+      {showDebtModal && (
+        <div
+          style={modalBackdropStyle}
+          onClick={(e) => e.target === e.currentTarget && setShowDebtModal(false)}
+        >
+          <div style={modalCardStyle(isMobile)}>
+            <div style={modalTitleStyle}>Agregar Deuda / Préstamo</div>
+
+            {[
+              { key: "nombre", label: "Nombre", placeholder: "Ej: Préstamo Carro" },
+              { key: "entidad", label: "Entidad", placeholder: "Ej: DaviBank" },
+              { key: "montoOriginal", label: "Monto Original", placeholder: "Ej: 5000000", type: "number" },
+              { key: "saldoActual", label: "Saldo Actual", placeholder: "Ej: 4200000", type: "number" },
+              { key: "cuotaMensual", label: "Cuota Mensual", placeholder: "Ej: 120000", type: "number" },
+              { key: "tasa", label: "Tasa Interés (%)", placeholder: "Ej: 8.5", type: "number" },
+              { key: "plazoRestante", label: "Plazo Restante (meses)", placeholder: "Ej: 36", type: "number" },
+              { key: "notas", label: "Notas (opcional)", placeholder: "Detalle adicional" },
+            ].map(({ key, label, placeholder, type }) => (
+              <div key={key} style={{ marginBottom: "1rem" }}>
+                <label style={fieldLabelStyle}>{label}</label>
+                <input
+                  type={type || "text"}
+                  value={debtForm[key]}
+                  onChange={(e) => setDebtForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  style={fieldInputStyle}
+                />
+              </div>
+            ))}
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={fieldLabelStyle}>Moneda</label>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {["CRC", "USD"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setDebtForm((f) => ({ ...f, moneda: m }))}
+                    style={{
+                      padding: "0.55rem 1.25rem",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: debtForm.moneda === m ? T.emeraldDim : "transparent",
+                      border: `1px solid ${debtForm.moneda === m ? `${T.emerald}50` : T.border}`,
+                      color: debtForm.moneda === m ? T.emerald : T.muted2,
+                    }}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
+              <button onClick={() => setShowDebtModal(false)} style={cancelButtonStyle}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleRegistrarDeuda}
+                disabled={!debtForm.nombre || !debtForm.saldoActual}
+                style={primaryButtonStyle(!!debtForm.nombre && !!debtForm.saldoActual)}
+              >
+                Guardar deuda →
               </button>
             </div>
           </div>
@@ -2308,3 +2567,93 @@ export default function App() {
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────
+const modalBackdropStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 200,
+  background: "rgba(0,0,0,0.72)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "1rem",
+};
+
+const modalCardStyle = (isMobile) => ({
+  background: T.card,
+  border: `1px solid ${T.border}`,
+  borderRadius: 20,
+  padding: isMobile ? "1rem" : "1.5rem",
+  width: "100%",
+  maxWidth: 470,
+  maxHeight: "90vh",
+  overflowY: "auto",
+});
+
+const modalTitleStyle = {
+  fontFamily: "'Syne',sans-serif",
+  fontWeight: 700,
+  fontSize: "1.08rem",
+  marginBottom: "1rem",
+};
+
+const fieldLabelStyle = {
+  fontSize: 11,
+  color: T.muted,
+  fontFamily: "'DM Mono',monospace",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  display: "block",
+  marginBottom: 6,
+};
+
+const fieldInputStyle = {
+  width: "100%",
+  background: T.card2,
+  border: `1px solid ${T.border}`,
+  borderRadius: 10,
+  padding: "0.75rem 0.95rem",
+  color: T.text,
+  fontSize: 13.5,
+  outline: "none",
+  fontFamily: "'DM Sans',sans-serif",
+  boxSizing: "border-box",
+};
+
+const cancelButtonStyle = {
+  flex: 1,
+  padding: "0.8rem",
+  borderRadius: 12,
+  background: "transparent",
+  border: `1px solid ${T.border}`,
+  color: T.muted2,
+  cursor: "pointer",
+  fontSize: 13,
+};
+
+const primaryButtonStyle = (enabled) => ({
+  flex: 1.4,
+  padding: "0.8rem",
+  borderRadius: 12,
+  cursor: enabled ? "pointer" : "default",
+  fontSize: 13,
+  fontWeight: 600,
+  background: enabled ? `linear-gradient(135deg, ${T.emerald}30, ${T.sapphire}30)` : "transparent",
+  border: `1px solid ${enabled ? `${T.emerald}50` : T.border}`,
+  color: enabled ? T.emerald : T.muted,
+});
+
+const fabMenuButtonStyle = {
+  width: "100%",
+  textAlign: "left",
+  padding: "0.75rem 0.85rem",
+  borderRadius: 10,
+  background: "transparent",
+  border: "none",
+  color: T.text,
+  cursor: "pointer",
+  fontSize: 13,
+};
