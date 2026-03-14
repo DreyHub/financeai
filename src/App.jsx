@@ -10,6 +10,8 @@ import {
   PieChart,
   Pie,
   Cell,
+  BarChart,
+  Bar,
 } from "recharts";
 
 // ─────────────────────────────────────────────────────────────
@@ -20,29 +22,17 @@ const CONFIG = {
     "219304870557-pvhr9m5njhn7fgat8r9u6q4hl0sl3m7n.apps.googleusercontent.com",
 
   SHEET_NAME: "FinanceAI",
-  APP_MARKER: "financeai_web_v2",
+  APP_MARKER: "financeai_web_v3",
   LOCAL_STORAGE_SHEET_KEY: "financeai_sheet_id",
   LOCAL_STORAGE_AUTH_KEY: "financeai_google_granted",
   DEFAULT_CYCLE_START_DAY: 17,
 
   TABS: {
     transacciones: "Transacciones",
+    tarjetas: "Tarjetas",
     cuentas: "Cuentas",
     prestamos: "Préstamos",
     config: "Config",
-  },
-
-  COLS: {
-    fecha: 0,
-    hora: 1,
-    comercio: 2,
-    tarjeta: 3,
-    moneda: 4,
-    monto: 5,
-    ciclo: 6,
-    importado: 7,
-    tipo: 8,
-    notas: 9,
   },
 
   SCOPES: [
@@ -60,12 +50,14 @@ const SHEET_HEADERS = {
       "Tarjeta",
       "Moneda",
       "Monto",
+      "Corte",
       "Ciclo",
       "Importado",
       "Tipo",
       "Notas",
     ],
   ],
+  Tarjetas: [["Tarjeta", "Nombre", "Corte", "Pago", "Activa", "Notas"]],
   Cuentas: [["ID", "Nombre de la Cuenta", "Moneda", "Saldo Inicial", "Notas"]],
   Préstamos: [
     [
@@ -107,6 +99,9 @@ const T = {
   muted2: "#8892AA",
 };
 
+// ─────────────────────────────────────────────────────────────
+// CATEGORY RULES
+// ─────────────────────────────────────────────────────────────
 const CATEGORY_RULES = [
   {
     keywords: ["SUPER", "LICORERA", "MAXI", "FRESH", "WALMART", "PRICEMART", "PRICE SMART"],
@@ -150,16 +145,114 @@ const CATEGORY_RULES = [
 // ─────────────────────────────────────────────────────────────
 const DEMO = {
   transacciones: [
-    { fecha: "11/03/2026", hora: "09:12", comercio: "CI BAYER HEREDIA", moneda: "CRC", monto: 3850, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "11/03/2026", hora: "12:45", comercio: "SUPER BUENA SUERTE", moneda: "CRC", monto: 1675, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "09/03/2026", hora: "18:20", comercio: "DLC*DIDI San Jose", moneda: "CRC", monto: 550, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "09/03/2026", hora: "19:02", comercio: "PRICE SMART ALAJUELA", moneda: "CRC", monto: 88328, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "09/03/2026", hora: "19:10", comercio: "ESTACION DE SERVICIO", moneda: "CRC", monto: 21624, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "09/03/2026", hora: "20:31", comercio: "Spotify", moneda: "USD", monto: 6.99, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "08/03/2026", hora: "08:22", comercio: "APP KOLBI ICE", moneda: "CRC", monto: 30505, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "07/03/2026", hora: "13:21", comercio: "MAXIPALI NARANJO", moneda: "CRC", monto: 37744, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "06/03/2026", hora: "10:11", comercio: "EBA*AMAZON Washington", moneda: "CRC", monto: 30081, ciclo: "Feb26-Mar26", tipo: "gasto" },
-    { fecha: "04/03/2026", hora: "17:47", comercio: "KFC MULTIPLAZA", moneda: "CRC", monto: 6340, ciclo: "Feb26-Mar26", tipo: "gasto" },
+    {
+      fecha: "12/03/2026",
+      hora: "12:45 PM",
+      comercio: "CI BAYER HEREDIA",
+      tarjeta: "4006",
+      moneda: "CRC",
+      monto: 3850,
+      corte: 26,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "DAVI Principal (4006) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "12/03/2026",
+      hora: "04:09 PM",
+      comercio: "SUPER BUENA SUERTE",
+      tarjeta: "4006",
+      moneda: "CRC",
+      monto: 1675,
+      corte: 26,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "DAVI Principal (4006) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "10/03/2026",
+      hora: "08:41 AM",
+      comercio: "DLC*DIDI San Jose",
+      tarjeta: "4006",
+      moneda: "CRC",
+      monto: 550,
+      corte: 26,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "DAVI Principal (4006) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "10/03/2026",
+      hora: "05:15 PM",
+      comercio: "PRICE SMART ALAJUELA",
+      tarjeta: "4006",
+      moneda: "CRC",
+      monto: 88328,
+      corte: 26,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "DAVI Principal (4006) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "10/03/2026",
+      hora: "07:15 PM",
+      comercio: "Spotify",
+      tarjeta: "4006",
+      moneda: "USD",
+      monto: 6.99,
+      corte: 26,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "DAVI Principal (4006) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "08/03/2026",
+      hora: "07:16 PM",
+      comercio: "MAXIPALI NARANJO",
+      tarjeta: "1234",
+      moneda: "CRC",
+      monto: 37744,
+      corte: 15,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "BAC Walmart (1234) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "07/03/2026",
+      hora: "08:53 PM",
+      comercio: "EBA*AMAZON Washington",
+      tarjeta: "1234",
+      moneda: "CRC",
+      monto: 30081,
+      corte: 15,
+      cicloBase: "Feb26-Mar26",
+      ciclo: "BAC Walmart (1234) - Feb26-Mar26",
+      tipo: "gasto",
+      notas: "",
+    },
+    {
+      fecha: "06/03/2026",
+      hora: "10:11 AM",
+      comercio: "Pago salario",
+      tarjeta: "",
+      moneda: "CRC",
+      monto: 950000,
+      corte: "",
+      cicloBase: "Feb26-Mar26",
+      ciclo: "Feb26-Mar26",
+      tipo: "ingreso",
+      notas: "Demo",
+    },
+  ],
+  tarjetas: [
+    { tarjeta: "4006", nombre: "DAVI Principal", corte: 26, pago: 17, activa: true, notas: "" },
+    { tarjeta: "1234", nombre: "BAC Walmart", corte: 15, pago: 5, activa: true, notas: "" },
   ],
   ahorros: [
     { cuenta: "Davibank Colones", moneda: "CRC", saldo: 853460.44 },
@@ -181,12 +274,41 @@ function clamp(n, min, max) {
   return Math.min(Math.max(n, min), max);
 }
 
+function normalizeHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+function buildHeaderMap(rows) {
+  const first = rows?.[0] || [];
+  const map = {};
+  first.forEach((h, i) => {
+    map[normalizeHeader(h)] = i;
+  });
+  return map;
+}
+
+function getCell(row, map, keys, fallback = "") {
+  for (const key of keys) {
+    const idx = map[normalizeHeader(key)];
+    if (idx !== undefined) return row?.[idx] ?? fallback;
+  }
+  return fallback;
+}
+
 function parseMonto(raw) {
   if (raw === null || raw === undefined || raw === "") return 0;
+
   let clean = String(raw).replace(/[₡$\s]/g, "").trim();
 
-  if (clean.includes(",")) {
-    clean = clean.replace(/\./g, "").replace(",", ".");
+  if (clean.includes(",") && clean.includes(".")) {
+    clean = clean.replace(/,/g, "");
+  } else if (clean.includes(",") && !clean.includes(".")) {
+    clean = clean.replace(",", ".");
   }
 
   const parsed = parseFloat(clean);
@@ -197,7 +319,11 @@ function parseDateOnly(fecha) {
   if (!fecha) return null;
   const match = String(fecha).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!match) return null;
-  const [, d, m, y] = match.map(Number);
+
+  const d = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const y = parseInt(match[3], 10);
+
   const dt = new Date(y, m - 1, d);
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
@@ -249,8 +375,28 @@ function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
 
+function normalizeLast4(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits ? digits.slice(-4) : "";
+}
+
+function validateCutDay(value, fallback = CONFIG.DEFAULT_CYCLE_START_DAY) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 1 || n > 31) return fallback;
+  return n;
+}
+
+function isBaseCycleLabel(value) {
+  return /^[A-Z][a-z]{2}\d{2}-[A-Z][a-z]{2}\d{2}$/.test(String(value || "").trim());
+}
+
 function getCycleInfoForDate(date, cycleStartDay) {
-  const safeDay = clamp(parseInt(cycleStartDay || CONFIG.DEFAULT_CYCLE_START_DAY, 10) || CONFIG.DEFAULT_CYCLE_START_DAY, 1, 28);
+  const safeDay = clamp(
+    parseInt(cycleStartDay || CONFIG.DEFAULT_CYCLE_START_DAY, 10) || CONFIG.DEFAULT_CYCLE_START_DAY,
+    1,
+    28
+  );
+
   const current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
   let startMonth = current.getMonth();
@@ -310,6 +456,27 @@ function getTypeMeta(type) {
   }
 }
 
+function getTarjetaDisplay(card) {
+  if (!card) return "Sin tarjeta";
+  const last4 = normalizeLast4(card.tarjeta);
+  const nombre = String(card.nombre || "").trim();
+
+  if (!nombre) return last4 || "Sin tarjeta";
+  if (!last4) return nombre;
+
+  const lower = nombre.toLowerCase();
+  if (lower === last4.toLowerCase()) return last4;
+  if (lower === `tarjeta ${last4}`.toLowerCase()) return last4;
+
+  return `${nombre} (${last4})`;
+}
+
+function findCardByAnyValue(input, cards) {
+  const last4 = normalizeLast4(input);
+  if (!last4) return null;
+  return cards.find((c) => normalizeLast4(c.tarjeta) === last4) || null;
+}
+
 const fmtCRC = (n) => `₡${Math.round(Number(n || 0)).toLocaleString("es-CR").replace(/\s/g, ".")}`;
 const fmtUSD = (n) =>
   `$${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -333,38 +500,84 @@ function readConfig(rows) {
   };
 }
 
-function parseTransacciones(rows, cycleStartDay) {
-  const currentCycle = getCycleInfoForDate(new Date(), cycleStartDay).label;
+function parseTarjetas(rows) {
+  if (!rows?.length) return [];
+  const map = buildHeaderMap(rows);
 
-  const data = rows
-    .filter((r) => r?.[CONFIG.COLS.fecha] && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(String(r[CONFIG.COLS.fecha]).split(" ")[0]))
+  return rows
+    .slice(1)
+    .filter((r) => normalizeLast4(getCell(r, map, ["Tarjeta"])))
+    .map((r) => ({
+      tarjeta: normalizeLast4(getCell(r, map, ["Tarjeta"])),
+      nombre: String(getCell(r, map, ["Nombre"], "")).trim(),
+      corte: validateCutDay(getCell(r, map, ["Corte"], CONFIG.DEFAULT_CYCLE_START_DAY)),
+      pago: getCell(r, map, ["Pago"], ""),
+      activa: String(getCell(r, map, ["Activa"], "Sí")).trim().toLowerCase() !== "no",
+      notas: getCell(r, map, ["Notas"], ""),
+    }))
+    .sort((a, b) => getTarjetaDisplay(a).localeCompare(getTarjetaDisplay(b)));
+}
+
+function parseTransacciones(rows, tarjetas, cycleStartDay) {
+  if (!rows?.length) return [];
+  const map = buildHeaderMap(rows);
+
+  return rows
+    .slice(1)
+    .filter((r) => {
+      const fecha = String(getCell(r, map, ["Fecha"], "") || "").split(" ")[0];
+      return /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fecha);
+    })
     .map((r) => {
-      const fecha = String(r[CONFIG.COLS.fecha] || "").split(" ")[0];
-      const hora = r[CONFIG.COLS.hora] || "";
+      const fecha = String(getCell(r, map, ["Fecha"], "") || "").split(" ")[0];
+      const hora = getCell(r, map, ["Hora"], "");
+      const comercio = getCell(r, map, ["Comercio"], "");
+      const tarjeta = normalizeLast4(getCell(r, map, ["Tarjeta"], ""));
+      const moneda = String(getCell(r, map, ["Moneda"], "CRC")).toUpperCase();
+      const monto = parseMonto(getCell(r, map, ["Monto"], 0));
+
+      const tarjetaInfo = findCardByAnyValue(tarjeta, tarjetas);
+      const corteRaw = getCell(r, map, ["Corte"], "");
+      const corte = validateCutDay(corteRaw || tarjetaInfo?.corte || cycleStartDay, cycleStartDay);
+
       const parsedDate = parseDateOnly(fecha);
-      const computedCycle = parsedDate ? getCycleInfoForDate(parsedDate, cycleStartDay).label : "";
+      const cicloBase = parsedDate ? getCycleInfoForDate(parsedDate, corte).label : "";
+      const cicloRaw = String(getCell(r, map, ["Ciclo"], "") || "").trim();
+
+      const hasBadCycle =
+        !cicloRaw ||
+        /sin ciclo/i.test(cicloRaw) ||
+        /^\d{4}\s*-\s*sin ciclo/i.test(cicloRaw) ||
+        /\(\d{4}\)\s*-\s*sin ciclo/i.test(cicloRaw);
+
+      let ciclo = cicloRaw;
+
+      if (hasBadCycle) {
+        ciclo = tarjetaInfo ? `${getTarjetaDisplay(tarjetaInfo)} - ${cicloBase}` : cicloBase;
+      } else if (isBaseCycleLabel(cicloRaw) && tarjetaInfo) {
+        ciclo = `${getTarjetaDisplay(tarjetaInfo)} - ${cicloRaw}`;
+      }
+
       return {
         fecha,
         hora,
-        comercio: r[CONFIG.COLS.comercio] || "",
-        tarjeta: r[CONFIG.COLS.tarjeta] || "",
-        moneda: String(r[CONFIG.COLS.moneda] || "CRC").toUpperCase(),
-        monto: parseMonto(r[CONFIG.COLS.monto]),
-        ciclo: r[CONFIG.COLS.ciclo] || computedCycle,
-        importado: r[CONFIG.COLS.importado] || "",
-        tipo: normalizeTipo(r[CONFIG.COLS.tipo]),
-        notas: r[CONFIG.COLS.notas] || "",
+        comercio,
+        tarjeta,
+        moneda,
+        monto,
+        corte,
+        cicloBase,
+        ciclo,
+        importado: getCell(r, map, ["Importado"], ""),
+        tipo: normalizeTipo(getCell(r, map, ["Tipo"], "")),
+        notas: getCell(r, map, ["Notas"], ""),
       };
+    })
+    .sort((a, b) => {
+      const ta = parseDateTime(a.fecha, a.hora)?.getTime() || 0;
+      const tb = parseDateTime(b.fecha, b.hora)?.getTime() || 0;
+      return tb - ta;
     });
-
-  const currentCycleRows = data.filter((t) => t.ciclo === currentCycle);
-  const chosen = currentCycleRows.length ? currentCycleRows : data;
-
-  return chosen.sort((a, b) => {
-    const ta = parseDateTime(a.fecha, a.hora)?.getTime() || 0;
-    const tb = parseDateTime(b.fecha, b.hora)?.getTime() || 0;
-    return tb - ta;
-  });
 }
 
 function getStoredSheetId() {
@@ -423,6 +636,7 @@ async function gFetch(url, token, opts = {}) {
       (typeof data === "object" && data?.message) ||
       raw ||
       "Error desconocido";
+
     const err = new Error(`API error ${res.status}: ${message}`);
     err.status = res.status;
     throw err;
@@ -513,6 +727,10 @@ function arraysEqual(a = [], b = []) {
   return a.every((x, i) => String(x) === String(b[i]));
 }
 
+function isBlankRow(row = []) {
+  return !row.some((v) => String(v || "").trim() !== "");
+}
+
 async function ensureSpreadsheetStructure(sheetId, token) {
   const meta = await fetchSpreadsheetMeta(sheetId, token);
   const existingTitles = new Set((meta?.sheets || []).map((s) => s.properties.title));
@@ -540,7 +758,10 @@ async function ensureSpreadsheetStructure(sheetId, token) {
   for (const [tab, headers] of Object.entries(SHEET_HEADERS)) {
     const rows = await fetchSheetData(sheetId, tab, token);
     const currentHeader = rows?.[0] || [];
-    if (!arraysEqual(currentHeader, headers[0])) {
+
+    if (!rows.length || isBlankRow(currentHeader)) {
+      await writeRange(sheetId, `${tab}!A1`, headers, token);
+    } else if (tab !== "Transacciones" && tab !== "Tarjetas" && !arraysEqual(currentHeader, headers[0])) {
       await writeRange(sheetId, `${tab}!A1`, headers, token);
     }
   }
@@ -548,11 +769,13 @@ async function ensureSpreadsheetStructure(sheetId, token) {
   const configRows = await fetchSheetData(sheetId, "Config", token);
   const config = readConfig(configRows);
 
+  const configKeys = new Set(configRows.slice(1).map((r) => String(r?.[0] || "").trim()));
   const missingRows = [];
-  if (config.appMarker !== CONFIG.APP_MARKER) {
+
+  if (config.appMarker !== CONFIG.APP_MARKER && !configKeys.has("app_marker")) {
     missingRows.push(["app_marker", CONFIG.APP_MARKER]);
   }
-  if (!configRows.slice(1).some((r) => String(r?.[0] || "").trim() === "ciclo_inicio_dia")) {
+  if (!configKeys.has("ciclo_inicio_dia")) {
     missingRows.push(["ciclo_inicio_dia", String(CONFIG.DEFAULT_CYCLE_START_DAY)]);
   }
 
@@ -578,7 +801,7 @@ async function findManagedSheet(token) {
     try {
       const configRows = await fetchSheetData(file.id, "Config", token);
       const config = readConfig(configRows);
-      if (config.appMarker === CONFIG.APP_MARKER) return file.id;
+      if (config.appMarker === CONFIG.APP_MARKER || file.name === CONFIG.SHEET_NAME) return file.id;
     } catch {
       // ignore
     }
@@ -615,7 +838,7 @@ function StatCard({ label, value, sub, color, icon }) {
         background: T.card,
         border: `1px solid ${T.border}`,
         borderRadius: 16,
-        padding: "1rem 1rem",
+        padding: "1rem",
         minWidth: 0,
       }}
     >
@@ -723,6 +946,21 @@ function SecondaryButton({ children, onClick, fullWidth = false }) {
   );
 }
 
+function FilterSelect({ label, value, onChange, options }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ ...fieldLabelStyle, marginBottom: 6 }}>{label}</div>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={fieldInputStyle}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
@@ -770,12 +1008,17 @@ export default function App() {
   });
 
   const [txns, setTxns] = useState(DEMO.transacciones);
+  const [tarjetasData, setTarjetasData] = useState(DEMO.tarjetas);
   const [ahorrosData, setAhorrosData] = useState(DEMO.ahorros);
   const [deudasData, setDeudasData] = useState(DEMO.deudas);
+
+  const [selectedCycle, setSelectedCycle] = useState("all");
+  const [selectedCard, setSelectedCard] = useState("all");
 
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showDebtModal, setShowDebtModal] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
 
   const [movementType, setMovementType] = useState("gasto");
@@ -783,6 +1026,7 @@ export default function App() {
     comercio: "",
     monto: "",
     moneda: "CRC",
+    tarjeta: "",
     notas: "",
   });
 
@@ -805,11 +1049,15 @@ export default function App() {
     notas: "",
   });
 
+  const [cardForm, setCardForm] = useState({
+    tarjeta: "",
+    nombre: "",
+    corte: String(CONFIG.DEFAULT_CYCLE_START_DAY),
+    pago: "",
+    notas: "",
+  });
+
   const cycleStartDay = configData.cycleStartDay;
-  const ACTIVE_CYCLE = useMemo(
-    () => getCycleInfoForDate(new Date(), cycleStartDay).label,
-    [cycleStartDay]
-  );
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -859,7 +1107,7 @@ export default function App() {
         }
 
         const accessToken = resp.access_token;
-        const expiresAt = Date.now() + (Number(resp.expires_in || 3600) * 1000);
+        const expiresAt = Date.now() + Number(resp.expires_in || 3600) * 1000;
 
         setAuth({ token: accessToken, expiresAt });
         localStorage.setItem(CONFIG.LOCAL_STORAGE_AUTH_KEY, "1");
@@ -921,8 +1169,9 @@ export default function App() {
     await ensureSpreadsheetStructure(sid, token);
 
     setSetupStatus("Cargando datos reales...");
-    const [txnRows, cuentasRows, prestamosRows, configRows] = await Promise.all([
+    const [txnRows, tarjetasRows, cuentasRows, prestamosRows, configRows] = await Promise.all([
       fetchSheetData(sid, CONFIG.TABS.transacciones, token),
+      fetchSheetData(sid, CONFIG.TABS.tarjetas, token),
       fetchSheetData(sid, CONFIG.TABS.cuentas, token),
       fetchSheetData(sid, CONFIG.TABS.prestamos, token),
       fetchSheetData(sid, CONFIG.TABS.config, token),
@@ -931,7 +1180,8 @@ export default function App() {
     const cfg = readConfig(configRows);
     setConfigData({ cycleStartDay: cfg.cycleStartDay });
 
-    const parsedTxns = parseTransacciones(txnRows, cfg.cycleStartDay);
+    const parsedTarjetas = parseTarjetas(tarjetasRows);
+    const parsedTxns = parseTransacciones(txnRows, parsedTarjetas, cfg.cycleStartDay);
 
     const cuentasParsed = cuentasRows
       .slice(1)
@@ -955,6 +1205,7 @@ export default function App() {
         meses: parseInt(r[8] || "0", 10) || 0,
       }));
 
+    setTarjetasData(parsedTarjetas);
     setTxns(parsedTxns);
     setAhorrosData(cuentasParsed);
     setDeudasData(prestamosParsed);
@@ -963,9 +1214,56 @@ export default function App() {
     setSetupStatus("");
   };
 
+  async function reloadAll() {
+    if (!sheetId || !auth.token) return;
+
+    const [txnRows, tarjetasRows, cuentasRows, prestamosRows] = await Promise.all([
+      fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token),
+      fetchSheetData(sheetId, CONFIG.TABS.tarjetas, auth.token),
+      fetchSheetData(sheetId, CONFIG.TABS.cuentas, auth.token),
+      fetchSheetData(sheetId, CONFIG.TABS.prestamos, auth.token),
+    ]);
+
+    const parsedTarjetas = parseTarjetas(tarjetasRows);
+    const parsedTxns = parseTransacciones(txnRows, parsedTarjetas, cycleStartDay);
+
+    const cuentasParsed = cuentasRows
+      .slice(1)
+      .filter((r) => r?.[1] && r?.[2] && r?.[3] !== undefined)
+      .map((r) => ({
+        cuenta: r[1],
+        moneda: String(r[2] || "CRC").toUpperCase(),
+        saldo: parseMonto(r[3]),
+      }));
+
+    const prestamosParsed = prestamosRows
+      .slice(1)
+      .filter((r) => r?.[1] && r?.[5] !== undefined)
+      .map((r) => ({
+        nombre: r[1],
+        entidad: r[2] || "",
+        moneda: String(r[3] || "CRC").toUpperCase(),
+        saldo: parseMonto(r[5]),
+        cuota: parseMonto(r[6]),
+        tasa: parseFloat(String(r[7] || "0").replace(",", ".")) || 0,
+        meses: parseInt(r[8] || "0", 10) || 0,
+      }));
+
+    setTarjetasData(parsedTarjetas);
+    setTxns(parsedTxns);
+    setAhorrosData(cuentasParsed);
+    setDeudasData(prestamosParsed);
+  }
+
   async function reloadTransactions() {
-    const txnRows = await fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token);
-    const parsed = parseTransacciones(txnRows, cycleStartDay);
+    const [txnRows, tarjetasRows] = await Promise.all([
+      fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token),
+      fetchSheetData(sheetId, CONFIG.TABS.tarjetas, auth.token),
+    ]);
+
+    const parsedTarjetas = parseTarjetas(tarjetasRows);
+    const parsed = parseTransacciones(txnRows, parsedTarjetas, cycleStartDay);
+    setTarjetasData(parsedTarjetas);
     setTxns(parsed);
   }
 
@@ -1001,6 +1299,73 @@ export default function App() {
     setDeudasData(prestamosParsed);
   }
 
+  async function reloadCards() {
+    const tarjetasRows = await fetchSheetData(sheetId, CONFIG.TABS.tarjetas, auth.token);
+    setTarjetasData(parseTarjetas(tarjetasRows));
+  }
+
+  const cycleOptions = useMemo(() => {
+    const cycleMap = new Map();
+
+    txns.forEach((t) => {
+      const key = t.ciclo || "Sin ciclo";
+      const ts = parseDateTime(t.fecha, t.hora)?.getTime() || 0;
+      cycleMap.set(key, Math.max(cycleMap.get(key) || 0, ts));
+    });
+
+    const sorted = [...cycleMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cycle]) => ({ value: cycle, label: cycle }));
+
+    return [{ value: "all", label: "Todos los ciclos" }, ...sorted];
+  }, [txns]);
+
+  const cardOptions = useMemo(() => {
+    const map = new Map();
+
+    tarjetasData
+      .filter((c) => c.activa)
+      .forEach((card) => {
+        map.set(normalizeLast4(card.tarjeta), {
+          value: normalizeLast4(card.tarjeta),
+          label: getTarjetaDisplay(card),
+        });
+      });
+
+    txns.forEach((t) => {
+      const last4 = normalizeLast4(t.tarjeta);
+      if (!last4 || map.has(last4)) return;
+      map.set(last4, { value: last4, label: last4 });
+    });
+
+    return [{ value: "all", label: "Todas las tarjetas" }, ...[...map.values()].sort((a, b) => a.label.localeCompare(b.label))];
+  }, [tarjetasData, txns]);
+
+  useEffect(() => {
+    const valid = cycleOptions.some((o) => o.value === selectedCycle);
+    if (!valid) {
+      const firstReal = cycleOptions.find((o) => o.value !== "all");
+      setSelectedCycle(firstReal?.value || "all");
+    }
+  }, [cycleOptions, selectedCycle]);
+
+  useEffect(() => {
+    const valid = cardOptions.some((o) => o.value === selectedCard);
+    if (!valid) setSelectedCard("all");
+  }, [cardOptions, selectedCard]);
+
+  const visibleTxns = useMemo(() => {
+    return txns.filter((t) => {
+      const cycleOk = selectedCycle === "all" || t.ciclo === selectedCycle;
+      const cardOk = selectedCard === "all" || normalizeLast4(t.tarjeta) === selectedCard;
+      return cycleOk && cardOk;
+    });
+  }, [txns, selectedCycle, selectedCard]);
+
+  const cycleScopedTxns = useMemo(() => {
+    return txns.filter((t) => (selectedCycle === "all" ? true : t.ciclo === selectedCycle));
+  }, [txns, selectedCycle]);
+
   const handleRegistrarMovimiento = async () => {
     if (!hasValidToken() || !sheetId) {
       setError("Tu sesión con Google expiró. Tocá “Conectar / renovar Google” y probá de nuevo.");
@@ -1012,15 +1377,23 @@ export default function App() {
     const now = new Date();
     const fecha = formatDateDDMMYYYY(now);
     const hora = now.toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" });
-    const ciclo = getCycleInfoForDate(now, cycleStartDay).label;
+
+    const card = findCardByAnyValue(movementForm.tarjeta, tarjetasData);
+    const last4 = card ? card.tarjeta : normalizeLast4(movementForm.tarjeta);
+    const corte = card ? validateCutDay(card.corte, cycleStartDay) : validateCutDay(cycleStartDay, cycleStartDay);
+    const cicloBase = getCycleInfoForDate(now, corte).label;
+    const ciclo = last4
+      ? `${card ? getTarjetaDisplay(card) : last4} - ${cicloBase}`
+      : cicloBase;
 
     const row = [
       fecha,
       hora,
       movementForm.comercio,
-      "Manual",
+      last4,
       movementForm.moneda,
       movementForm.monto,
+      last4 ? corte : "",
       ciclo,
       new Date().toISOString(),
       movementType,
@@ -1039,6 +1412,7 @@ export default function App() {
         comercio: "",
         monto: "",
         moneda: "CRC",
+        tarjeta: "",
         notas: "",
       });
     } catch (e) {
@@ -1135,12 +1509,54 @@ export default function App() {
     }
   };
 
+  const handleRegistrarTarjeta = async () => {
+    if (!hasValidToken() || !sheetId) {
+      setError("Tu sesión con Google expiró. Volvé a conectar Google.");
+      return;
+    }
+
+    const last4 = normalizeLast4(cardForm.tarjeta);
+    if (!last4 || !cardForm.nombre || !cardForm.corte) return;
+
+    try {
+      setLoading(true);
+      setSetupStatus("Guardando tarjeta...");
+
+      const row = [
+        last4,
+        cardForm.nombre,
+        validateCutDay(cardForm.corte, cycleStartDay),
+        cardForm.pago,
+        "Sí",
+        cardForm.notas,
+      ];
+
+      await appendRow(sheetId, CONFIG.TABS.tarjetas, row, auth.token);
+      await reloadCards();
+      await reloadTransactions();
+
+      setShowCardModal(false);
+      setCardForm({
+        tarjeta: "",
+        nombre: "",
+        corte: String(CONFIG.DEFAULT_CYCLE_START_DAY),
+        pago: "",
+        notas: "",
+      });
+    } catch (e) {
+      setError(`Error al registrar tarjeta: ${e.message}`);
+    } finally {
+      setLoading(false);
+      setSetupStatus("");
+    }
+  };
+
   // ───────────────────────────────────────────────────────────
   // DERIVED DATA
   // ───────────────────────────────────────────────────────────
-  const gastos = useMemo(() => txns.filter((t) => t.tipo === "gasto"), [txns]);
-  const ingresos = useMemo(() => txns.filter((t) => t.tipo === "ingreso"), [txns]);
-  const pagosDeuda = useMemo(() => txns.filter((t) => t.tipo === "pago_deuda"), [txns]);
+  const gastos = useMemo(() => visibleTxns.filter((t) => t.tipo === "gasto"), [visibleTxns]);
+  const ingresos = useMemo(() => visibleTxns.filter((t) => t.tipo === "ingreso"), [visibleTxns]);
+  const pagosDeuda = useMemo(() => visibleTxns.filter((t) => t.tipo === "pago_deuda"), [visibleTxns]);
 
   const crcGastos = useMemo(() => gastos.filter((t) => t.moneda === "CRC"), [gastos]);
   const usdGastos = useMemo(() => gastos.filter((t) => t.moneda === "USD"), [gastos]);
@@ -1192,6 +1608,20 @@ export default function App() {
       .map(([key, amt]) => ({ day: labelFromDateKey(key), amt }));
   }, [crcGastos]);
 
+  const spendByCard = useMemo(() => {
+    const map = {};
+    cycleScopedTxns
+      .filter((t) => t.tipo === "gasto" && t.moneda === "CRC")
+      .forEach((t) => {
+        const card = findCardByAnyValue(t.tarjeta, tarjetasData);
+        const label = card ? getTarjetaDisplay(card) : normalizeLast4(t.tarjeta) || "Sin tarjeta";
+        if (!map[label]) map[label] = { tarjeta: label, total: 0 };
+        map[label].total += t.monto;
+      });
+
+    return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 6);
+  }, [cycleScopedTxns, tarjetasData]);
+
   const ahorros = ahorrosData;
   const deudas = deudasData;
 
@@ -1204,9 +1634,26 @@ export default function App() {
   const totalCuotasCRC = deudas.filter((d) => d.moneda === "CRC").reduce((s, d) => s + d.cuota, 0);
   const totalCuotasUSD = deudas.filter((d) => d.moneda === "USD").reduce((s, d) => s + d.cuota, 0);
 
+  const currentSelectionLabel = selectedCycle === "all" ? "Todos los ciclos" : selectedCycle;
+
+  const movementPreview = useMemo(() => {
+    const card = findCardByAnyValue(movementForm.tarjeta, tarjetasData);
+    const now = new Date();
+    const cut = card ? validateCutDay(card.corte, cycleStartDay) : cycleStartDay;
+    const cycleBase = getCycleInfoForDate(now, cut).label;
+    const last4 = card ? card.tarjeta : normalizeLast4(movementForm.tarjeta);
+
+    return {
+      cardLabel: card ? getTarjetaDisplay(card) : last4 || "Sin tarjeta",
+      cut: last4 ? cut : "—",
+      cycle: last4 ? `${card ? getTarjetaDisplay(card) : last4} - ${cycleBase}` : cycleBase,
+    };
+  }, [movementForm.tarjeta, tarjetasData, cycleStartDay]);
+
   const tabs = [
     { id: "overview", label: "Resumen", icon: "◈" },
     { id: "transactions", label: "Movimientos", icon: "◎" },
+    { id: "cards", label: "Tarjetas", icon: "◌" },
     { id: "savings", label: "Ahorros", icon: "◉" },
     { id: "debts", label: "Deudas", icon: "◫" },
   ];
@@ -1224,6 +1671,11 @@ export default function App() {
   const openDebtModal = () => {
     setShowActionMenu(false);
     setShowDebtModal(true);
+  };
+
+  const openCardModal = () => {
+    setShowActionMenu(false);
+    setShowCardModal(true);
   };
 
   return (
@@ -1317,7 +1769,7 @@ export default function App() {
                   marginTop: isMobile ? 6 : 0,
                 }}
               >
-                · Ciclo {ACTIVE_CYCLE}
+                · {currentSelectionLabel}
               </span>
             </h1>
           </div>
@@ -1442,7 +1894,7 @@ export default function App() {
             border: `1px solid ${T.border}`,
             borderRadius: 14,
             padding: 4,
-            marginBottom: "1.25rem",
+            marginBottom: "1rem",
             width: "100%",
             overflowX: "auto",
             scrollbarWidth: "none",
@@ -1474,25 +1926,65 @@ export default function App() {
           ))}
         </div>
 
+        {/* FILTERS */}
+        <div
+          style={{
+            background: T.card,
+            border: `1px solid ${T.border}`,
+            borderRadius: 16,
+            padding: isMobile ? "1rem" : "1rem 1.25rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto",
+              gap: "0.85rem",
+              alignItems: "end",
+            }}
+          >
+            <FilterSelect
+              label="Ciclo"
+              value={selectedCycle}
+              onChange={setSelectedCycle}
+              options={cycleOptions}
+            />
+
+            <FilterSelect
+              label="Tarjeta"
+              value={selectedCard}
+              onChange={setSelectedCard}
+              options={cardOptions}
+            />
+
+            {!isDemo && (
+              <SecondaryButton onClick={reloadAll} fullWidth={isMobile}>
+                ↻ Recargar
+              </SecondaryButton>
+            )}
+          </div>
+        </div>
+
         {/* OVERVIEW */}
         {tab === "overview" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "repeat(3, minmax(0, 1fr))",
+                gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
                 gap: "1rem",
               }}
             >
               <StatCard
-                label="Gastos Ciclo CRC"
+                label="Gastos CRC"
                 value={fmtCRC(totalGastosCRC)}
                 sub={`${crcGastos.length} movimientos`}
                 color={T.rose}
                 icon="₡"
               />
               <StatCard
-                label="Gastos Ciclo USD"
+                label="Gastos USD"
                 value={fmtUSD(totalGastosUSD)}
                 sub={`${usdGastos.length} movimientos`}
                 color={T.sapphire}
@@ -1526,6 +2018,20 @@ export default function App() {
                 color={T.rose}
                 icon="◎"
               />
+              <StatCard
+                label="Tarjetas activas"
+                value={String(tarjetasData.filter((t) => t.activa).length)}
+                sub={selectedCard === "all" ? "Vista general" : `Filtro ${selectedCard}`}
+                color={T.violet}
+                icon="◌"
+              />
+              <StatCard
+                label="Ciclo seleccionado"
+                value={selectedCycle === "all" ? "Todos" : selectedCycle}
+                sub="Filtro activo"
+                color={T.amber}
+                icon="◈"
+              />
             </div>
 
             <div
@@ -1540,7 +2046,9 @@ export default function App() {
                 <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1rem", marginBottom: 3 }}>
                   Gastos por Día
                 </div>
-                <div style={{ fontSize: 12, color: T.muted2 }}>Solo gastos CRC · Ciclo actual</div>
+                <div style={{ fontSize: 12, color: T.muted2 }}>
+                  Solo gastos CRC · {currentSelectionLabel}
+                </div>
               </div>
 
               {dailyData.length ? (
@@ -1573,7 +2081,7 @@ export default function App() {
                 </ResponsiveContainer>
               ) : (
                 <EmptyState
-                  title="Sin gastos CRC en este ciclo"
+                  title="Sin gastos CRC en esta selección"
                   subtitle="Cuando entren movimientos de gasto en colones, aquí vas a ver la curva diaria."
                 />
               )}
@@ -1740,6 +2248,46 @@ export default function App() {
                 )}
               </div>
             </div>
+
+            <div
+              style={{
+                background: T.card,
+                borderRadius: 16,
+                padding: isMobile ? "1rem" : "1.5rem",
+                border: `1px solid ${T.border}`,
+              }}
+            >
+              <div style={{ marginBottom: "1rem" }}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1rem", marginBottom: 3 }}>
+                  Gasto por Tarjeta
+                </div>
+                <div style={{ fontSize: 12, color: T.muted2 }}>
+                  Solo CRC · {selectedCycle === "all" ? "Todos los ciclos" : selectedCycle}
+                </div>
+              </div>
+
+              {spendByCard.length ? (
+                <ResponsiveContainer width="100%" height={isMobile ? 240 : 220}>
+                  <BarChart data={spendByCard}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis dataKey="tarjeta" tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tick={{ fill: T.muted, fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) => `₡${(v / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="total" name="Gastos" radius={[8, 8, 0, 0]} fill={T.sapphire} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState
+                  title="Sin gastos por tarjeta"
+                  subtitle="Cuando existan movimientos CRC asociados a tarjetas, aquí se verán agrupados."
+                />
+              )}
+            </div>
           </div>
         )}
 
@@ -1754,25 +2302,26 @@ export default function App() {
             }}
           >
             <SectionHeader
-              title="Movimientos del Ciclo"
-              subtitle={`${txns.length} movimientos · ${ACTIVE_CYCLE}`}
+              title="Movimientos"
+              subtitle={`${visibleTxns.length} movimientos · ${currentSelectionLabel}`}
               isMobile={isMobile}
               action={<SecondaryButton onClick={openMovementModal}>＋ Agregar movimiento</SecondaryButton>}
             />
 
-            {txns.length === 0 ? (
+            {visibleTxns.length === 0 ? (
               <div style={{ padding: isMobile ? "1rem" : "1.5rem" }}>
                 <EmptyState
-                  title="No hay movimientos en este ciclo"
-                  subtitle="Registrá uno manual o importá datos al Sheet."
+                  title="No hay movimientos en esta selección"
+                  subtitle="Registrá uno manual o cambiá el filtro de ciclo/tarjeta."
                   action={<SecondaryButton onClick={openMovementModal}>＋ Agregar movimiento</SecondaryButton>}
                 />
               </div>
             ) : isMobile ? (
               <div style={{ padding: "0.85rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {txns.map((t, i) => {
+                {visibleTxns.map((t, i) => {
                   const typeMeta = getTypeMeta(t.tipo);
                   const category = t.tipo === "gasto" ? getCategory(t.comercio) : null;
+                  const card = findCardByAnyValue(t.tarjeta, tarjetasData);
 
                   return (
                     <div
@@ -1808,7 +2357,6 @@ export default function App() {
                           <div style={{ fontSize: 11, color: T.muted2, fontFamily: "'DM Mono',monospace" }}>
                             {t.fecha}
                             {t.hora ? ` · ${t.hora}` : ""}
-                            {t.tarjeta ? ` · ${t.tarjeta}` : ""}
                           </div>
                         </div>
 
@@ -1867,8 +2415,33 @@ export default function App() {
                             fontFamily: "'DM Mono',monospace",
                           }}
                         >
-                          {t.moneda}
+                          {card ? getTarjetaDisplay(card) : t.tarjeta || "Sin tarjeta"}
                         </span>
+
+                        <span
+                          style={{
+                            background: "rgba(255,255,255,0.03)",
+                            border: `1px solid ${T.border}`,
+                            color: T.muted2,
+                            borderRadius: 20,
+                            padding: "0.24rem 0.55rem",
+                            fontSize: 11,
+                            fontFamily: "'DM Mono',monospace",
+                          }}
+                        >
+                          Corte {t.corte || "—"}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: "0.55rem",
+                          fontSize: 11,
+                          color: T.muted2,
+                          fontFamily: "'DM Mono',monospace",
+                        }}
+                      >
+                        {t.ciclo || "Sin ciclo"}
                       </div>
 
                       {t.notas && (
@@ -1885,11 +2458,11 @@ export default function App() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "rgba(255,255,255,0.02)" }}>
-                      {["Fecha", "Comercio", "Tipo", "Categoría", "Moneda", "Monto"].map((h) => (
+                      {["Fecha", "Comercio", "Tarjeta", "Corte", "Tipo", "Categoría", "Moneda", "Monto", "Ciclo"].map((h) => (
                         <th
                           key={h}
                           style={{
-                            padding: "0.75rem 1.25rem",
+                            padding: "0.75rem 1rem",
                             textAlign: h === "Monto" ? "right" : "left",
                             fontSize: 11,
                             color: T.muted,
@@ -1908,15 +2481,16 @@ export default function App() {
                   </thead>
 
                   <tbody>
-                    {txns.map((t, i) => {
+                    {visibleTxns.map((t, i) => {
                       const category = t.tipo === "gasto" ? getCategory(t.comercio) : null;
                       const typeMeta = getTypeMeta(t.tipo);
+                      const card = findCardByAnyValue(t.tarjeta, tarjetasData);
 
                       return (
                         <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
                           <td
                             style={{
-                              padding: "0.85rem 1.25rem",
+                              padding: "0.85rem 1rem",
                               fontSize: 12,
                               color: T.muted2,
                               fontFamily: "'DM Mono',monospace",
@@ -1929,10 +2503,10 @@ export default function App() {
 
                           <td
                             style={{
-                              padding: "0.85rem 1.25rem",
+                              padding: "0.85rem 1rem",
                               fontSize: 13,
                               color: T.text,
-                              maxWidth: 260,
+                              maxWidth: 220,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -1941,7 +2515,31 @@ export default function App() {
                             {t.comercio}
                           </td>
 
-                          <td style={{ padding: "0.85rem 1.25rem" }}>
+                          <td
+                            style={{
+                              padding: "0.85rem 1rem",
+                              fontSize: 12,
+                              color: T.muted2,
+                              fontFamily: "'DM Mono',monospace",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {card ? getTarjetaDisplay(card) : t.tarjeta || "—"}
+                          </td>
+
+                          <td
+                            style={{
+                              padding: "0.85rem 1rem",
+                              fontSize: 12,
+                              color: T.muted2,
+                              fontFamily: "'DM Mono',monospace",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {t.corte || "—"}
+                          </td>
+
+                          <td style={{ padding: "0.85rem 1rem" }}>
                             <span
                               style={{
                                 background: typeMeta.bg,
@@ -1958,7 +2556,7 @@ export default function App() {
                             </span>
                           </td>
 
-                          <td style={{ padding: "0.85rem 1.25rem" }}>
+                          <td style={{ padding: "0.85rem 1rem" }}>
                             {category ? (
                               <span
                                 style={{
@@ -1980,7 +2578,7 @@ export default function App() {
 
                           <td
                             style={{
-                              padding: "0.85rem 1.25rem",
+                              padding: "0.85rem 1rem",
                               fontSize: 12,
                               color: T.muted2,
                               fontFamily: "'DM Mono',monospace",
@@ -1992,7 +2590,7 @@ export default function App() {
 
                           <td
                             style={{
-                              padding: "0.85rem 1.25rem",
+                              padding: "0.85rem 1rem",
                               textAlign: "right",
                               fontSize: 13,
                               fontFamily: "'DM Mono',monospace",
@@ -2003,12 +2601,211 @@ export default function App() {
                           >
                             {t.moneda === "CRC" ? fmtCRC(t.monto) : fmtUSD(t.monto)}
                           </td>
+
+                          <td
+                            style={{
+                              padding: "0.85rem 1rem",
+                              fontSize: 11,
+                              color: T.muted2,
+                              fontFamily: "'DM Mono',monospace",
+                              whiteSpace: "nowrap",
+                              maxWidth: 260,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                            title={t.ciclo}
+                          >
+                            {t.ciclo || "—"}
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+            )}
+          </div>
+        )}
+
+        {/* TARJETAS */}
+        {tab === "cards" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                gap: "1rem",
+              }}
+            >
+              <StatCard
+                label="Tarjetas activas"
+                value={String(tarjetasData.filter((t) => t.activa).length)}
+                sub={`${tarjetasData.length} registradas`}
+                color={T.violet}
+                icon="◌"
+              />
+              <StatCard
+                label="Gasto CRC filtrado"
+                value={fmtCRC(totalGastosCRC)}
+                sub={selectedCard === "all" ? "Todas las tarjetas" : `Tarjeta ${selectedCard}`}
+                color={T.rose}
+                icon="₡"
+              />
+              <StatCard
+                label="Gasto USD filtrado"
+                value={fmtUSD(totalGastosUSD)}
+                sub={selectedCycle === "all" ? "Todos los ciclos" : selectedCycle}
+                color={T.sapphire}
+                icon="$"
+              />
+            </div>
+
+            {tarjetasData.length ? (
+              <div
+                style={{
+                  background: T.card,
+                  borderRadius: 16,
+                  border: `1px solid ${T.border}`,
+                  overflow: "hidden",
+                }}
+              >
+                <SectionHeader
+                  title="Tarjetas"
+                  subtitle={`${tarjetasData.length} tarjetas`}
+                  isMobile={isMobile}
+                  action={<SecondaryButton onClick={openCardModal}>＋ Agregar tarjeta</SecondaryButton>}
+                />
+
+                <div style={{ padding: isMobile ? "0.85rem" : "1rem 1.25rem", display: "grid", gap: "0.85rem" }}>
+                  {tarjetasData.map((card, i) => {
+                    const last4 = normalizeLast4(card.tarjeta);
+                    const cardTxns = txns.filter((t) => normalizeLast4(t.tarjeta) === last4);
+                    const cardVisible = visibleTxns.filter((t) => normalizeLast4(t.tarjeta) === last4);
+                    const crc = cardVisible.filter((t) => t.tipo === "gasto" && t.moneda === "CRC").reduce((a, t) => a + t.monto, 0);
+                    const usd = cardVisible.filter((t) => t.tipo === "gasto" && t.moneda === "USD").reduce((a, t) => a + t.monto, 0);
+                    const lastTxn = cardTxns[0];
+
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          background: T.card2,
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 14,
+                          padding: isMobile ? "0.95rem" : "1rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "1rem",
+                            flexDirection: isMobile ? "column" : "row",
+                            marginBottom: "0.8rem",
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
+                              {getTarjetaDisplay(card)}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: T.muted,
+                                fontFamily: "'DM Mono',monospace",
+                                marginTop: 3,
+                              }}
+                            >
+                              Corte {card.corte}
+                              {card.pago ? ` · Pago ${card.pago}` : ""}
+                              {card.activa ? " · Activa" : " · Inactiva"}
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: isMobile ? "left" : "right" }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                color: T.rose,
+                                fontFamily: "'DM Mono',monospace",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {fmtCRC(crc)}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: T.sapphire,
+                                fontFamily: "'DM Mono',monospace",
+                                marginTop: 2,
+                              }}
+                            >
+                              {fmtUSD(usd)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+                          <span
+                            style={{
+                              background: T.violet + "15",
+                              border: `1px solid ${T.violet}30`,
+                              color: T.violet,
+                              borderRadius: 20,
+                              padding: "0.24rem 0.55rem",
+                              fontSize: 11,
+                              fontFamily: "'DM Mono',monospace",
+                            }}
+                          >
+                            {selectedCycle === "all" ? "Todos los ciclos" : selectedCycle}
+                          </span>
+
+                          <span
+                            style={{
+                              background: "rgba(255,255,255,0.03)",
+                              border: `1px solid ${T.border}`,
+                              color: T.muted2,
+                              borderRadius: 20,
+                              padding: "0.24rem 0.55rem",
+                              fontSize: 11,
+                              fontFamily: "'DM Mono',monospace",
+                            }}
+                          >
+                            {cardTxns.length} movimientos
+                          </span>
+
+                          {lastTxn && (
+                            <span
+                              style={{
+                                background: "rgba(255,255,255,0.03)",
+                                border: `1px solid ${T.border}`,
+                                color: T.muted2,
+                                borderRadius: 20,
+                                padding: "0.24rem 0.55rem",
+                                fontSize: 11,
+                                fontFamily: "'DM Mono',monospace",
+                              }}
+                            >
+                              Último: {lastTxn.fecha}
+                            </span>
+                          )}
+                        </div>
+
+                        {card.notas && (
+                          <div style={{ marginTop: 10, fontSize: 12, color: T.muted2 }}>{card.notas}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                title="No hay tarjetas cargadas"
+                subtitle="Agregá una tarjeta para manejar corte por tarjeta y filtros más finos."
+                action={<SecondaryButton onClick={openCardModal}>＋ Agregar tarjeta</SecondaryButton>}
+              />
             )}
           </div>
         )}
@@ -2279,22 +3076,16 @@ export default function App() {
                 boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
               }}
             >
-              <button
-                onClick={openMovementModal}
-                style={fabMenuButtonStyle}
-              >
+              <button onClick={openMovementModal} style={fabMenuButtonStyle}>
                 💸 Agregar movimiento
               </button>
-              <button
-                onClick={openAccountModal}
-                style={fabMenuButtonStyle}
-              >
+              <button onClick={openCardModal} style={fabMenuButtonStyle}>
+                ◌ Agregar tarjeta
+              </button>
+              <button onClick={openAccountModal} style={fabMenuButtonStyle}>
                 ◉ Agregar cuenta
               </button>
-              <button
-                onClick={openDebtModal}
-                style={fabMenuButtonStyle}
-              >
+              <button onClick={openDebtModal} style={fabMenuButtonStyle}>
                 ◫ Agregar deuda
               </button>
             </div>
@@ -2363,22 +3154,77 @@ export default function App() {
               })}
             </div>
 
-            {[
-              { key: "comercio", label: "Comercio / Descripción", placeholder: "Ej: Super Buena Suerte" },
-              { key: "monto", label: "Monto", placeholder: "Ej: 5000", type: "number" },
-              { key: "notas", label: "Notas (opcional)", placeholder: "Detalle adicional" },
-            ].map(({ key, label, placeholder, type }) => (
-              <div key={key} style={{ marginBottom: "1rem" }}>
-                <label style={fieldLabelStyle}>{label}</label>
-                <input
-                  type={type || "text"}
-                  value={movementForm[key]}
-                  onChange={(e) => setMovementForm((f) => ({ ...f, [key]: e.target.value }))}
-                  placeholder={placeholder}
-                  style={fieldInputStyle}
-                />
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Comercio / Descripción</label>
+              <input
+                type="text"
+                value={movementForm.comercio}
+                onChange={(e) => setMovementForm((f) => ({ ...f, comercio: e.target.value }))}
+                placeholder="Ej: Super Buena Suerte"
+                style={fieldInputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Monto</label>
+              <input
+                type="number"
+                value={movementForm.monto}
+                onChange={(e) => setMovementForm((f) => ({ ...f, monto: e.target.value }))}
+                placeholder="Ej: 5000"
+                style={fieldInputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Tarjeta (últimos 4 o nombre)</label>
+              <input
+                list="financeai-card-options"
+                value={movementForm.tarjeta}
+                onChange={(e) => setMovementForm((f) => ({ ...f, tarjeta: e.target.value }))}
+                placeholder="Ej: 4006"
+                style={fieldInputStyle}
+              />
+              <datalist id="financeai-card-options">
+                {tarjetasData.map((card) => (
+                  <option key={card.tarjeta} value={getTarjetaDisplay(card)} />
+                ))}
+              </datalist>
+            </div>
+
+            <div
+              style={{
+                background: T.card2,
+                border: `1px solid ${T.border}`,
+                borderRadius: 12,
+                padding: "0.8rem",
+                marginBottom: "1rem",
+              }}
+            >
+              <div style={{ fontSize: 11, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>
+                PREVIEW
               </div>
-            ))}
+              <div style={{ fontSize: 12, color: T.text, marginBottom: 4 }}>
+                Tarjeta: <span style={{ color: T.emerald }}>{movementPreview.cardLabel}</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.text, marginBottom: 4 }}>
+                Corte: <span style={{ color: T.amber }}>{movementPreview.cut}</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.text }}>
+                Ciclo: <span style={{ color: T.sapphire }}>{movementPreview.cycle}</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Notas (opcional)</label>
+              <input
+                type="text"
+                value={movementForm.notas}
+                onChange={(e) => setMovementForm((f) => ({ ...f, notas: e.target.value }))}
+                placeholder="Detalle adicional"
+                style={fieldInputStyle}
+              />
+            </div>
 
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={fieldLabelStyle}>Moneda</label>
@@ -2414,6 +3260,95 @@ export default function App() {
                 style={primaryButtonStyle(!!movementForm.comercio && !!movementForm.monto)}
               >
                 Registrar →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CARD MODAL */}
+      {showCardModal && (
+        <div
+          style={modalBackdropStyle}
+          onClick={(e) => e.target === e.currentTarget && setShowCardModal(false)}
+        >
+          <div style={modalCardStyle(isMobile)}>
+            <div style={modalTitleStyle}>Agregar Tarjeta</div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Últimos 4 dígitos</label>
+              <input
+                type="text"
+                value={cardForm.tarjeta}
+                onChange={(e) => setCardForm((f) => ({ ...f, tarjeta: e.target.value.replace(/\D/g, "").slice(-4) }))}
+                placeholder="Ej: 4006"
+                style={fieldInputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Nombre</label>
+              <input
+                type="text"
+                value={cardForm.nombre}
+                onChange={(e) => setCardForm((f) => ({ ...f, nombre: e.target.value }))}
+                placeholder="Ej: DAVI Principal"
+                style={fieldInputStyle}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                gap: "0.85rem",
+                marginBottom: "1rem",
+              }}
+            >
+              <div>
+                <label style={fieldLabelStyle}>Día de corte</label>
+                <input
+                  type="number"
+                  value={cardForm.corte}
+                  onChange={(e) => setCardForm((f) => ({ ...f, corte: e.target.value }))}
+                  placeholder="Ej: 26"
+                  style={fieldInputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={fieldLabelStyle}>Día de pago</label>
+                <input
+                  type="number"
+                  value={cardForm.pago}
+                  onChange={(e) => setCardForm((f) => ({ ...f, pago: e.target.value }))}
+                  placeholder="Ej: 17"
+                  style={fieldInputStyle}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={fieldLabelStyle}>Notas (opcional)</label>
+              <input
+                type="text"
+                value={cardForm.notas}
+                onChange={(e) => setCardForm((f) => ({ ...f, notas: e.target.value }))}
+                placeholder="Detalle adicional"
+                style={fieldInputStyle}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
+              <button onClick={() => setShowCardModal(false)} style={cancelButtonStyle}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleRegistrarTarjeta}
+                disabled={!cardForm.tarjeta || !cardForm.nombre || !cardForm.corte}
+                style={primaryButtonStyle(!!cardForm.tarjeta && !!cardForm.nombre && !!cardForm.corte)}
+              >
+                Guardar tarjeta →
               </button>
             </div>
           </div>
@@ -2562,6 +3497,7 @@ export default function App() {
         *::-webkit-scrollbar { width: 4px; height: 4px; }
         *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
         input::placeholder { color: #5b647a; }
+        select, input { appearance: none; }
         body { margin: 0; background: ${T.bg}; }
       `}</style>
     </div>
