@@ -14,6 +14,7 @@ import {
   Bar,
 } from "recharts";
 
+import FinanceAIPanel from "./components/FinanceAIPanel";
 // ─────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────
@@ -1362,6 +1363,29 @@ export default function App() {
     });
   }, [txns, selectedCycle, selectedCard]);
 
+  const previousCycleLabel = useMemo(() => {
+  if (selectedCycle === "all") return "";
+
+  const realCycles = cycleOptions.filter((o) => o.value !== "all");
+  const idx = realCycles.findIndex((o) => o.value === selectedCycle);
+
+  return idx >= 0 ? realCycles[idx + 1]?.value || "" : "";
+}, [cycleOptions, selectedCycle]);
+
+const comparisonTxns = useMemo(() => {
+  if (!previousCycleLabel) return [];
+
+  return txns.filter((t) => {
+    const cycleOk = t.ciclo === previousCycleLabel;
+    const cardOk = selectedCard === "all" || normalizeLast4(t.tarjeta) === selectedCard;
+    return cycleOk && cardOk;
+  });
+}, [txns, previousCycleLabel, selectedCard]);
+
+const selectedCardLabel = useMemo(() => {
+  return cardOptions.find((o) => o.value === selectedCard)?.label || "Todas las tarjetas";
+}, [cardOptions, selectedCard]);
+
   const cycleScopedTxns = useMemo(() => {
     return txns.filter((t) => (selectedCycle === "all" ? true : t.ciclo === selectedCycle));
   }, [txns, selectedCycle]);
@@ -2033,6 +2057,15 @@ export default function App() {
                 icon="◈"
               />
             </div>
+
+            <FinanceAIPanel
+  theme={T}
+  isMobile={isMobile}
+  transactions={visibleTxns}
+  comparisonTransactions={comparisonTxns}
+  cycleLabel={currentSelectionLabel}
+  cardLabel={selectedCardLabel}
+/>
 
             <div
               style={{
