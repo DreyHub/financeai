@@ -1424,7 +1424,7 @@ const categories = useMemo(() => {
                           <td style={tableCellMono}>{card ? getTarjetaDisplay(card) : t.tarjeta || "—"}</td>
                           <td style={tableCellMono}>{t.corte || "—"}</td>
                           <td style={{ padding: "0.85rem 1rem" }}><span style={{ background: typeMeta.bg, border: `1px solid ${typeMeta.color}30`, color: typeMeta.color, borderRadius: 6, padding: "0.2rem 0.6rem", fontSize: 11, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{typeMeta.label}</span></td>
-                          <td style={{ padding: "0.85rem 1rem" }}>
+                          <td style={{ padding: "0.85rem 1rem", minWidth: 140 }}>
   {category ? (
     <span
       onClick={() => !isDemo && setEditingCategory({ txnIndex: i, txn: t, current: category.cat })}
