@@ -977,8 +977,20 @@ export default function App() {
     try {
       setLoading(true);
       setSetupStatus("Guardando movimiento...");
-      await appendRow(sheetId, CONFIG.TABS.transacciones, row, auth.token);
-      await reloadTransactions();
+await appendRow(sheetId, CONFIG.TABS.transacciones, row, auth.token);
+
+// Si es transferencia, actualizar saldos de cuentas
+if (movementType === "transferencia" && movementForm.cuentaOrigen && movementForm.cuentaDestino) {
+  await actualizarSaldosCuentas(
+    movementForm.cuentaOrigen,
+    movementForm.cuentaDestino,
+    parseMonto(movementForm.monto),
+    movementForm.moneda
+  );
+}
+
+await reloadTransactions();
+await reloadAccounts();
       setShowMovementModal(false);
       setMovementType("gasto");
       setMovementForm({ comercio: "", monto: "", moneda: "CRC", tarjeta: "", cuentaOrigen: "", cuentaDestino: "", notas: "" });
@@ -1114,6 +1126,45 @@ export default function App() {
   } finally {
     setLoading(false);
     setSetupStatus("");
+  }
+}
+
+async function actualizarSaldosCuentas(cuentaOrigen, cuentaDestino, monto, moneda) {
+  const rows = await fetchSheetData(sheetId, CONFIG.TABS.cuentas, auth.token);
+  if (rows.length < 2) return;
+
+  const map = buildHeaderMap(rows);
+  const saldoIdx = map[normalizeHeader("Saldo Inicial")] ?? 3;
+  const nombreIdx = map[normalizeHeader("Nombre de la Cuenta")] ?? 1;
+  const monedaIdx = map[normalizeHeader("Moneda")] ?? 2;
+
+  const updates = [];
+
+  rows.slice(1).forEach((row, i) => {
+    const nombre = String(row[nombreIdx] || "").trim();
+    const monedaRow = String(row[monedaIdx] || "CRC").toUpperCase();
+    const saldoActual = parseMonto(row[saldoIdx]);
+    const sheetRow = i + 2; // +2 por header y 0-index
+
+    if (nombre === cuentaOrigen && monedaRow === moneda.toUpperCase()) {
+      const nuevoSaldo = saldoActual - monto;
+      updates.push({ row: sheetRow, col: saldoIdx + 1, value: nuevoSaldo });
+    }
+    if (nombre === cuentaDestino && monedaRow === moneda.toUpperCase()) {
+      const nuevoSaldo = saldoActual + monto;
+      updates.push({ row: sheetRow, col: saldoIdx + 1, value: nuevoSaldo });
+    }
+  });
+
+  // Actualizar cada celda
+  for (const update of updates) {
+    const colLetter = String.fromCharCode(64 + update.col);
+    const range = `${CONFIG.TABS.cuentas}!${colLetter}${update.row}`;
+    await gFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      auth.token,
+      { method: "PUT", body: JSON.stringify({ values: [[update.value]] }) }
+    );
   }
 }
 
