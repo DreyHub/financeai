@@ -1440,7 +1440,7 @@ const categories = useMemo(() => {
         title: "Click para editar",
       }}
     >
-      {category.cat} {!isDemo && "✏️"}
+      {category.cat}
     </span>
   ) : (
     <span style={{ fontSize: 12, color: T.muted2 }}>—</span>
