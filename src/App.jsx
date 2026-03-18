@@ -1169,16 +1169,19 @@ export default function App() {
   const totalPagosDeudaCRC = crcPagosDeuda.reduce((a, t) => a + t.monto, 0);
   const totalPagosDeudaUSD = usdPagosDeuda.reduce((a, t) => a + t.monto, 0);
 
-  const categories = useMemo(() => {
-    const map = {};
-    crcGastos.forEach((t) => {
-      const { cat, color } = getCategory(t.comercio);
-      if (!map[cat]) map[cat] = { cat, color, total: 0, count: 0 };
-      map[cat].total += t.monto;
-      map[cat].count += 1;
-    });
-    return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [crcGastos]);
+const categories = useMemo(() => {
+  const map = {};
+  crcGastos.forEach((t) => {
+    const catFromSheet = t.categoria && t.categoria !== "" ? t.categoria : null;
+    const { cat, color } = catFromSheet
+      ? { cat: catFromSheet, color: getCategoryColor(catFromSheet) }
+      : getCategory(t.comercio);
+    if (!map[cat]) map[cat] = { cat, color, total: 0, count: 0 };
+    map[cat].total += t.monto;
+    map[cat].count += 1;
+  });
+  return Object.values(map).sort((a, b) => b.total - a.total);
+}, [crcGastos]);
 
   const topComercios = useMemo(() => {
     const map = {};
