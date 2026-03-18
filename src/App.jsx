@@ -317,6 +317,17 @@ function getCategory(comercio) {
   return { cat: "Otros", color: T.muted2 };
 }
 
+function getCategoryColor(cat) {
+  const colors = {
+    "Supermercado": T.emerald, "Comidas": T.sapphire, "Transporte": T.amber,
+    "Digital/Subs": T.violet, "Salud": "#34D399", "Personal": "#F472B6",
+    "Seguros": "#60A5FA", "Educación": "#818CF8", "Entretenimiento": "#F87171",
+    "Ropa": "#FB923C", "Hogar": "#A78BFA", "Viajes": "#38BDF8",
+    "Combustible": "#FBBF24", "Farmacia": "#34D399",
+  };
+  return colors[cat] || T.muted2;
+}
+
 function getTypeMeta(type) {
   switch (type) {
     case "ingreso":
@@ -421,6 +432,7 @@ function parseTransacciones(rows, tarjetas, cycleStartDay) {
         cuentaOrigen: getCell(r, map, ["Cuenta Origen"], ""),
         cuentaDestino: getCell(r, map, ["Cuenta Destino"], ""),
         notas: getCell(r, map, ["Notas"], ""),
+        categoria: getCell(r, map, ["Categoría", "Categoria"], ""),
       };
     })
     .sort((a, b) => (parseDateTime(b.fecha, b.hora)?.getTime() || 0) - (parseDateTime(a.fecha, a.hora)?.getTime() || 0));
@@ -717,6 +729,7 @@ export default function App() {
   const [showEditCardModal, setShowEditCardModal] = useState(false);
   const [editCardForm, setEditCardForm] = useState({ rowIndex: -1, tarjeta: "", nombre: "", corte: "", pago: "", notas: "" });
   const cycleStartDay = configData.cycleStartDay;
+  const [editingCategory, setEditingCategory] = useState(null);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -1104,6 +1117,41 @@ export default function App() {
   }
 }
 
+  async function handleGuardarCategoria(txn, categoria) {
+  if (!hasValidToken() || !sheetId) return;
+  try {
+    const rows = await fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token);
+    const map = buildHeaderMap(rows);
+    const catIdx = map[normalizeHeader("Categoría")] ?? map[normalizeHeader("Categoria")];
+    if (catIdx === undefined) { setError("No se encontró columna Categoría."); return; }
+
+    const rowIndex = rows.findIndex((r, i) => {
+      if (i === 0) return false;
+      return String(r[0] || "").split(" ")[0] === txn.fecha &&
+        String(r[1] || "") === txn.hora &&
+        String(r[2] || "") === txn.comercio;
+    });
+
+    if (rowIndex === -1) { setError("No se encontró la transacción."); return; }
+
+    const sheetRow = rowIndex + 1;
+    const col = catIdx + 1;
+    const colLetter = String.fromCharCode(64 + col);
+    const range = `${CONFIG.TABS.transacciones}!${colLetter}${sheetRow}`;
+
+    await gFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      auth.token,
+      { method: "PUT", body: JSON.stringify({ values: [[categoria]] }) }
+    );
+
+    await reloadTransactions();
+    setEditingCategory(null);
+  } catch (e) {
+    setError(`Error guardando categoría: ${e.message}`);
+  }
+}
+
   const gastos = useMemo(() => visibleTxns.filter((t) => t.tipo === "gasto"), [visibleTxns]);
   const ingresos = useMemo(() => visibleTxns.filter((t) => t.tipo === "ingreso"), [visibleTxns]);
   const pagosDeuda = useMemo(() => visibleTxns.filter((t) => t.tipo === "pago_deuda"), [visibleTxns]);
@@ -1359,7 +1407,11 @@ export default function App() {
                   </thead>
                   <tbody>
                     {visibleTxns.map((t, i) => {
-                      const category = t.tipo === "gasto" ? getCategory(t.comercio) : null;
+                      const category = t.tipo === "gasto" 
+  ? (t.categoria && t.categoria !== "Otros" && t.categoria !== "" 
+      ? { cat: t.categoria, color: getCategoryColor(t.categoria) } 
+      : getCategory(t.comercio)) 
+  : null;
                       const typeMeta = getTypeMeta(t.tipo);
                       const card = findCardByAnyValue(t.tarjeta, tarjetasData);
                       return (
@@ -1369,7 +1421,28 @@ export default function App() {
                           <td style={tableCellMono}>{card ? getTarjetaDisplay(card) : t.tarjeta || "—"}</td>
                           <td style={tableCellMono}>{t.corte || "—"}</td>
                           <td style={{ padding: "0.85rem 1rem" }}><span style={{ background: typeMeta.bg, border: `1px solid ${typeMeta.color}30`, color: typeMeta.color, borderRadius: 6, padding: "0.2rem 0.6rem", fontSize: 11, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{typeMeta.label}</span></td>
-                          <td style={{ padding: "0.85rem 1rem" }}>{category ? <span style={{ background: `${category.color}15`, border: `1px solid ${category.color}30`, color: category.color, borderRadius: 6, padding: "0.2rem 0.6rem", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{category.cat}</span> : <span style={{ fontSize: 12, color: T.muted2 }}>—</span>}</td>
+                          <td style={{ padding: "0.85rem 1rem" }}>
+  {category ? (
+    <span
+      onClick={() => !isDemo && setEditingCategory({ txnIndex: i, txn: t, current: category.cat })}
+      style={{
+        background: `${category.color}15`,
+        border: `1px solid ${category.color}30`,
+        color: category.color,
+        borderRadius: 6,
+        padding: "0.2rem 0.6rem",
+        fontSize: 11,
+        fontFamily: "'DM Mono',monospace",
+        cursor: isDemo ? "default" : "pointer",
+        title: "Click para editar",
+      }}
+    >
+      {category.cat} {!isDemo && "✏️"}
+    </span>
+  ) : (
+    <span style={{ fontSize: 12, color: T.muted2 }}>—</span>
+  )}
+</td>
                           <td style={tableCellMono}>{t.cuentaOrigen || "—"}</td>
                           <td style={tableCellMono}>{t.cuentaDestino || "—"}</td>
                           <td style={tableCellMono}>{t.moneda}</td>
@@ -1700,6 +1773,36 @@ export default function App() {
           Guardar cambios →
         </button>
       </div>
+    </div>
+  </div>
+)}
+
+{editingCategory && (
+  <div style={modalBackdropStyle} onClick={(e) => e.target === e.currentTarget && setEditingCategory(null)}>
+    <div style={{ ...modalCardStyle(isMobile), maxWidth: 380 }}>
+      <div style={modalTitleStyle}>Editar Categoría</div>
+      <div style={{ fontSize: 13, color: T.muted2, marginBottom: "1rem" }}>{editingCategory.txn.comercio}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1.25rem" }}>
+        {["Supermercado","Comidas","Transporte","Digital/Subs","Salud","Personal","Seguros","Educación","Entretenimiento","Ropa","Hogar","Viajes","Combustible","Farmacia","Otros"].map((cat) => (
+          <button
+            key={cat}
+            onClick={() => handleGuardarCategoria(editingCategory.txn, cat)}
+            style={{
+              padding: "0.6rem",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: editingCategory.current === cat ? 700 : 400,
+              background: editingCategory.current === cat ? T.emeraldDim : T.card2,
+              border: `1px solid ${editingCategory.current === cat ? `${T.emerald}50` : T.border}`,
+              color: editingCategory.current === cat ? T.emerald : T.muted2,
+            }}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+      <button onClick={() => setEditingCategory(null)} style={cancelButtonStyle}>Cancelar</button>
     </div>
   </div>
 )}
