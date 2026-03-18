@@ -1163,7 +1163,7 @@ async function actualizarSaldosCuentas(cuentaOrigen, cuentaDestino, monto, moned
     await gFetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
       auth.token,
-      { method: "PUT", body: JSON.stringify({ values: [[update.value]] }) }
+      { method: "PUT", body: JSON.stringify({ values: [[Number(update.value.toFixed(2))]] }) }
     );
   }
 }
