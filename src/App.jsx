@@ -714,6 +714,8 @@ export default function App() {
   const [accountForm, setAccountForm] = useState({ nombre: "", moneda: "CRC", saldoInicial: "", notas: "" });
   const [debtForm, setDebtForm] = useState({ nombre: "", entidad: "", moneda: "CRC", montoOriginal: "", saldoActual: "", cuotaMensual: "", tasa: "", plazoRestante: "", notas: "" });
   const [cardForm, setCardForm] = useState({ tarjeta: "", nombre: "", corte: String(CONFIG.DEFAULT_CYCLE_START_DAY), pago: "", notas: "" });
+  const [showEditCardModal, setShowEditCardModal] = useState(false);
+  const [editCardForm, setEditCardForm] = useState({ rowIndex: -1, tarjeta: "", nombre: "", corte: "", pago: "", notas: "" });
   const cycleStartDay = configData.cycleStartDay;
 
   useEffect(() => {
@@ -1047,6 +1049,61 @@ export default function App() {
     }
   };
 
+  async function handleEditarTarjeta() {
+  setError(null);
+  if (!hasValidToken() || !sheetId) { setError("Tu sesión expiró. Reconectá Google."); return; }
+  if (!editCardForm.tarjeta || !editCardForm.nombre || !editCardForm.corte) return;
+ 
+  try {
+    setLoading(true);
+    setSetupStatus("Actualizando tarjeta...");
+ 
+    // Leer filas actuales de Tarjetas
+    const rows = await fetchSheetData(sheetId, CONFIG.TABS.tarjetas, auth.token);
+ 
+    // Encontrar la fila que corresponde a esta tarjeta
+    const rowIndex = rows.findIndex((r, i) => i > 0 && normalizeLast4(r[0]) === normalizeLast4(editCardForm.tarjeta));
+ 
+    if (rowIndex === -1) {
+      setError("No se encontró la tarjeta en el Sheet.");
+      return;
+    }
+ 
+    // Actualizar la fila (rowIndex + 1 porque Sheets es 1-indexed, +1 más por el header)
+    const sheetRow = rowIndex + 1;
+    const range = `${CONFIG.TABS.tarjetas}!A${sheetRow}:F${sheetRow}`;
+ 
+    await gFetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      auth.token,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          values: [[
+            normalizeLast4(editCardForm.tarjeta),
+            editCardForm.nombre,
+            validateCutDay(editCardForm.corte, cycleStartDay),
+            editCardForm.pago,
+            "Sí",
+            editCardForm.notas,
+          ]],
+        }),
+      }
+    );
+ 
+    await reloadCards();
+    await reloadTransactions();
+    setShowEditCardModal(false);
+    setEditCardForm({ tarjeta: "", nombre: "", corte: "", pago: "", notas: "" });
+ 
+  } catch (e) {
+    setError(`Error al actualizar tarjeta: ${e.message}`);
+  } finally {
+    setLoading(false);
+    setSetupStatus("");
+  }
+}
+
   const gastos = useMemo(() => visibleTxns.filter((t) => t.tipo === "gasto"), [visibleTxns]);
   const ingresos = useMemo(() => visibleTxns.filter((t) => t.tipo === "ingreso"), [visibleTxns]);
   const pagosDeuda = useMemo(() => visibleTxns.filter((t) => t.tipo === "pago_deuda"), [visibleTxns]);
@@ -1328,7 +1385,7 @@ export default function App() {
           </div>
         )}
 
-        {tab === "cards" && (
+{tab === "cards" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: "1rem" }}>
               <StatCard label="Tarjetas activas" value={String(tarjetasData.filter((t) => t.activa).length)} sub={`${tarjetasData.length} registradas`} color={T.violet} icon="◌" />
@@ -1364,6 +1421,32 @@ export default function App() {
                           {lastTxn && <span style={pill(T.muted2, true)}>Último: {lastTxn.fecha}</span>}
                         </div>
                         {card.notas && <div style={{ marginTop: 10, fontSize: 12, color: T.muted2 }}>{card.notas}</div>}
+                        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => {
+                              setEditCardForm({
+                                tarjeta: card.tarjeta,
+                                nombre: card.nombre,
+                                corte: String(card.corte),
+                                pago: String(card.pago || ""),
+                                notas: card.notas || "",
+                              });
+                              setShowEditCardModal(true);
+                            }}
+                            style={{
+                              background: T.emeraldDim,
+                              border: `1px solid ${T.emerald}40`,
+                              color: T.emerald,
+                              borderRadius: 8,
+                              padding: "0.4rem 0.85rem",
+                              cursor: "pointer",
+                              fontSize: 12,
+                              fontFamily: "'DM Mono',monospace",
+                            }}
+                          >
+                            ✏️ Editar
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1547,6 +1630,79 @@ export default function App() {
           </div>
         </div>
       )}
+
+{showEditCardModal && (
+  <div style={modalBackdropStyle} onClick={(e) => e.target === e.currentTarget && setShowEditCardModal(false)}>
+    <div style={modalCardStyle(isMobile)}>
+      <div style={modalTitleStyle}>Editar Tarjeta</div>
+ 
+      <div style={{ background: T.amberDim, border: `1px solid ${T.amber}30`, borderRadius: 10, padding: "0.75rem 1rem", marginBottom: "1rem", fontSize: 12, color: T.amber }}>
+        ⚠️ Si cambiás el día de corte, ejecutá <strong>Recalcular ciclos</strong> en el Add-on para corregir las transacciones existentes.
+      </div>
+ 
+      <div style={{ marginBottom: "1rem" }}>
+        <label style={fieldLabelStyle}>Tarjeta</label>
+        <input type="text" value={editCardForm.tarjeta} disabled style={{ ...fieldInputStyle, opacity: 0.5, cursor: "not-allowed" }} />
+      </div>
+ 
+      <div style={{ marginBottom: "1rem" }}>
+        <label style={fieldLabelStyle}>Nombre</label>
+        <input
+          type="text"
+          value={editCardForm.nombre}
+          onChange={(e) => setEditCardForm((f) => ({ ...f, nombre: e.target.value }))}
+          placeholder="Ej: DAVI Principal"
+          style={fieldInputStyle}
+        />
+      </div>
+ 
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem", marginBottom: "1rem" }}>
+        <div>
+          <label style={fieldLabelStyle}>Día de corte</label>
+          <input
+            type="number"
+            value={editCardForm.corte}
+            onChange={(e) => setEditCardForm((f) => ({ ...f, corte: e.target.value }))}
+            placeholder="Ej: 26"
+            style={fieldInputStyle}
+          />
+        </div>
+        <div>
+          <label style={fieldLabelStyle}>Día de pago</label>
+          <input
+            type="number"
+            value={editCardForm.pago}
+            onChange={(e) => setEditCardForm((f) => ({ ...f, pago: e.target.value }))}
+            placeholder="Ej: 17"
+            style={fieldInputStyle}
+          />
+        </div>
+      </div>
+ 
+      <div style={{ marginBottom: "1rem" }}>
+        <label style={fieldLabelStyle}>Notas (opcional)</label>
+        <input
+          type="text"
+          value={editCardForm.notas}
+          onChange={(e) => setEditCardForm((f) => ({ ...f, notas: e.target.value }))}
+          placeholder="Detalle adicional"
+          style={fieldInputStyle}
+        />
+      </div>
+ 
+      <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
+        <button onClick={() => setShowEditCardModal(false)} style={cancelButtonStyle}>Cancelar</button>
+        <button
+          onClick={handleEditarTarjeta}
+          disabled={!editCardForm.nombre || !editCardForm.corte}
+          style={primaryButtonStyle(!!editCardForm.nombre && !!editCardForm.corte)}
+        >
+          Guardar cambios →
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       <style>{`
         * { box-sizing: border-box; }
