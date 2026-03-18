@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const FALLBACK_THEME = {
   card: "#131720",
@@ -12,13 +12,16 @@ const FALLBACK_THEME = {
   amberDim: "rgba(245,166,35,0.1)",
   rose: "#FF5E7D",
   roseDim: "rgba(255,94,125,0.1)",
+  violet: "#9B7FFF",
   text: "#EEF2FF",
   muted: "#4B5675",
   muted2: "#8892AA",
 };
 
+const MAX_AI_TXNS = 300;
+
 function sanitizeTransactions(items = []) {
-  return items.slice(0, 150).map((t) => ({
+  return items.slice(0, MAX_AI_TXNS).map((t) => ({
     fecha: t.fecha || "",
     hora: t.hora || "",
     comercio: t.comercio || "",
@@ -28,6 +31,8 @@ function sanitizeTransactions(items = []) {
     corte: t.corte || "",
     ciclo: t.ciclo || "",
     tipo: t.tipo || "gasto",
+    cuentaOrigen: t.cuentaOrigen || "",
+    cuentaDestino: t.cuentaDestino || "",
     notas: t.notas || "",
   }));
 }
@@ -70,6 +75,78 @@ function SectionCard({ theme, title, children }) {
   );
 }
 
+function MiniStat({ theme, label, value, color }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: `1px solid ${theme.border}`,
+        borderRadius: 12,
+        padding: "0.75rem",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: theme.muted,
+          fontFamily: "'DM Mono',monospace",
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          color,
+          fontWeight: 700,
+          fontFamily: "'DM Mono',monospace",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SimpleList({ items = [], color = "#fff", empty = "Sin datos." }) {
+  if (!items?.length) {
+    return <div style={{ color: "#8892AA", fontSize: 12 }}>{empty}</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+      {items.map((item, idx) => (
+        <div key={idx} style={{ display: "flex", gap: "0.55rem", alignItems: "flex-start" }}>
+          <span style={{ color, marginTop: 2 }}>•</span>
+          <span style={{ color, fontSize: 13, lineHeight: 1.45 }}>{item}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function actionBtn(theme, active, disabled = false) {
+  return {
+    padding: "0.7rem 0.95rem",
+    borderRadius: 10,
+    border: `1px solid ${
+      disabled ? theme.border : active ? `${theme.emerald}40` : theme.border
+    }`,
+    background: disabled
+      ? "rgba(255,255,255,0.03)"
+      : active
+      ? theme.emeraldDim
+      : theme.card2,
+    color: disabled ? theme.muted : active ? theme.emerald : theme.text,
+    cursor: disabled ? "default" : "pointer",
+    fontSize: 12.5,
+    fontWeight: 600,
+    opacity: disabled ? 0.65 : 1,
+  };
+}
+
 export default function FinanceAIPanel({
   theme = FALLBACK_THEME,
   isMobile = false,
@@ -91,6 +168,13 @@ export default function FinanceAIPanel({
     [comparisonTransactions]
   );
 
+  useEffect(() => {
+    setAnalysis(null);
+    setSuggestions([]);
+    setQa(null);
+    setError("");
+  }, [transactions, comparisonTransactions, cycleLabel, cardLabel]);
+
   async function callAI(payload) {
     const res = await fetch("/api/finance-ai", {
       method: "POST",
@@ -98,9 +182,17 @@ export default function FinanceAIPanel({
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const raw = await res.text();
+    let data = null;
+
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      data = null;
+    }
+
     if (!res.ok) {
-      throw new Error(data?.error || "Falló finance-ai.");
+      throw new Error(data?.error || raw || "Falló finance-ai.");
     }
 
     return data;
@@ -109,7 +201,9 @@ export default function FinanceAIPanel({
   async function handleAnalyze() {
     try {
       setError("");
+      setAnalysis(null);
       setLoading("analyze");
+
       const data = await callAI({
         mode: "analyze",
         cycleLabel,
@@ -117,6 +211,7 @@ export default function FinanceAIPanel({
         transactions: currentData,
         comparisonTransactions: comparisonData,
       });
+
       setAnalysis(data);
     } catch (err) {
       setError(err.message || "No se pudo analizar.");
@@ -128,13 +223,16 @@ export default function FinanceAIPanel({
   async function handleCategorize() {
     try {
       setError("");
+      setSuggestions([]);
       setLoading("categorize");
+
       const data = await callAI({
         mode: "categorize",
         cycleLabel,
         cardLabel,
         transactions: currentData.filter((t) => t.tipo === "gasto"),
       });
+
       setSuggestions(data?.suggestions || []);
     } catch (err) {
       setError(err.message || "No se pudo sugerir categorías.");
@@ -146,15 +244,20 @@ export default function FinanceAIPanel({
   async function handleAsk() {
     try {
       if (!question.trim()) return;
+
       setError("");
+      setQa(null);
       setLoading("ask");
+
       const data = await callAI({
         mode: "ask",
         cycleLabel,
         cardLabel,
         question,
         transactions: currentData,
+        comparisonTransactions: comparisonData,
       });
+
       setQa(data);
     } catch (err) {
       setError(err.message || "No se pudo responder la pregunta.");
@@ -169,7 +272,13 @@ export default function FinanceAIPanel({
     "¿Qué tarjeta usé más?",
     "¿Hay algo raro o anormal?",
     "¿Qué comercios pesan más?",
+    "¿Cuáles fueron mis transferencias?",
   ];
+
+  const analyzeDisabled = !currentData.length || !!loading;
+  const categorizeDisabled =
+    !currentData.some((t) => t.tipo === "gasto") || !!loading;
+  const askDisabled = !question.trim() || !!loading || !currentData.length;
 
   return (
     <div
@@ -196,20 +305,25 @@ export default function FinanceAIPanel({
           <div style={{ fontSize: 12, color: theme.muted2, marginTop: 2 }}>
             {cycleLabel} · {cardLabel} · {totalMovs} movimientos
           </div>
+          {totalMovs >= MAX_AI_TXNS && (
+            <div style={{ fontSize: 11, color: theme.amber, marginTop: 6 }}>
+              Se están usando los últimos {MAX_AI_TXNS} movimientos para el análisis.
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             onClick={handleAnalyze}
-            disabled={!currentData.length || !!loading}
-            style={actionBtn(theme, loading === "analyze")}
+            disabled={analyzeDisabled}
+            style={actionBtn(theme, loading === "analyze", analyzeDisabled)}
           >
             {loading === "analyze" ? "Analizando..." : "Analizar ciclo"}
           </button>
           <button
             onClick={handleCategorize}
-            disabled={!currentData.length || !!loading}
-            style={actionBtn(theme, loading === "categorize")}
+            disabled={categorizeDisabled}
+            style={actionBtn(theme, loading === "categorize", categorizeDisabled)}
           >
             {loading === "categorize" ? "Pensando..." : "Sugerir categorías"}
           </button>
@@ -236,7 +350,7 @@ export default function FinanceAIPanel({
         <div style={{ display: "grid", gap: "1rem", marginBottom: "1rem" }}>
           <SectionCard theme={theme} title="Resumen">
             <div style={{ color: theme.text, fontSize: 14, lineHeight: 1.5 }}>
-              {analysis.summary}
+              {analysis.summary || "Sin resumen."}
             </div>
 
             <div
@@ -266,7 +380,11 @@ export default function FinanceAIPanel({
             </SectionCard>
 
             <SectionCard theme={theme} title="Alertas">
-              <SimpleList items={analysis.alerts} color={theme.amber} empty="No se detectaron alertas importantes." />
+              <SimpleList
+                items={analysis.alerts}
+                color={theme.amber}
+                empty="No se detectaron alertas importantes."
+              />
             </SectionCard>
 
             <SectionCard theme={theme} title="Recomendaciones">
@@ -342,8 +460,8 @@ export default function FinanceAIPanel({
           />
           <button
             onClick={handleAsk}
-            disabled={!question.trim() || !!loading || !currentData.length}
-            style={actionBtn(theme, loading === "ask")}
+            disabled={askDisabled}
+            style={actionBtn(theme, loading === "ask", askDisabled)}
           >
             {loading === "ask" ? "Respondiendo..." : "Preguntar"}
           </button>
@@ -371,23 +489,43 @@ export default function FinanceAIPanel({
                       border: `1px solid ${theme.border}`,
                       borderRadius: 10,
                       padding: "0.65rem 0.75rem",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: "0.75rem",
-                      flexDirection: isMobile ? "column" : "row",
                     }}
                   >
-                    <div style={{ color: theme.text, fontSize: 12 }}>{item.comercio}</div>
                     <div
                       style={{
-                        color: theme.muted2,
-                        fontSize: 11,
-                        fontFamily: "'DM Mono',monospace",
-                        whiteSpace: "nowrap",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "0.75rem",
+                        flexDirection: isMobile ? "column" : "row",
                       }}
                     >
-                      {item.fecha} · {item.moneda === "USD" ? fmtUSD(item.monto) : fmtCRC(item.monto)}
+                      <div style={{ color: theme.text, fontSize: 12 }}>
+                        {item.comercio}
+                      </div>
+                      <div
+                        style={{
+                          color: theme.muted2,
+                          fontSize: 11,
+                          fontFamily: "'DM Mono',monospace",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.fecha} · {item.moneda === "USD" ? fmtUSD(item.monto) : fmtCRC(item.monto)}
+                      </div>
                     </div>
+
+                    {(item.cuentaOrigen || item.cuentaDestino) && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          color: theme.sapphire,
+                          fontSize: 11,
+                          fontFamily: "'DM Mono',monospace",
+                        }}
+                      >
+                        {item.cuentaOrigen || "Origen"} → {item.cuentaDestino || "Destino"}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -426,7 +564,7 @@ export default function FinanceAIPanel({
                       fontFamily: "'DM Mono',monospace",
                     }}
                   >
-                    {s.fecha} · {(s.confidence * 100).toFixed(0)}%
+                    {s.fecha} · {((s.confidence || 0) * 100).toFixed(0)}%
                   </div>
                 </div>
 
@@ -454,69 +592,4 @@ export default function FinanceAIPanel({
       )}
     </div>
   );
-}
-
-function MiniStat({ theme, label, value, color }) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border: `1px solid ${theme.border}`,
-        borderRadius: 12,
-        padding: "0.75rem",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          color: theme.muted,
-          fontFamily: "'DM Mono',monospace",
-          textTransform: "uppercase",
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          color,
-          fontWeight: 700,
-          fontFamily: "'DM Mono',monospace",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SimpleList({ items = [], color = "#fff", empty = "Sin datos." }) {
-  if (!items?.length) {
-    return <div style={{ color: "#8892AA", fontSize: 12 }}>{empty}</div>;
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
-      {items.map((item, idx) => (
-        <div key={idx} style={{ display: "flex", gap: "0.55rem", alignItems: "flex-start" }}>
-          <span style={{ color, marginTop: 2 }}>•</span>
-          <span style={{ color, fontSize: 13, lineHeight: 1.45 }}>{item}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function actionBtn(theme, active) {
-  return {
-    padding: "0.7rem 0.95rem",
-    borderRadius: 10,
-    border: `1px solid ${active ? `${theme.emerald}40` : theme.border}`,
-    background: active ? theme.emeraldDim : theme.card2,
-    color: active ? theme.emerald : theme.text,
-    cursor: "pointer",
-    fontSize: 12.5,
-    fontWeight: 600,
-  };
 }
