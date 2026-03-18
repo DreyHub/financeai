@@ -979,14 +979,14 @@ export default function App() {
       setSetupStatus("Guardando movimiento...");
 await appendRow(sheetId, CONFIG.TABS.transacciones, row, auth.token);
 
-// Si es transferencia, actualizar saldos de cuentas
+
+// Actualizar saldos según tipo de movimiento
 if (movementType === "transferencia" && movementForm.cuentaOrigen && movementForm.cuentaDestino) {
-  await actualizarSaldosCuentas(
-    movementForm.cuentaOrigen,
-    movementForm.cuentaDestino,
-    parseMonto(movementForm.monto),
-    movementForm.moneda
-  );
+  await actualizarSaldosCuentas(movementForm.cuentaOrigen, movementForm.cuentaDestino, parseMonto(movementForm.monto), movementForm.moneda);
+} else if (movementType === "gasto" && movementForm.cuentaOrigen) {
+  await actualizarSaldosCuentas(movementForm.cuentaOrigen, null, parseMonto(movementForm.monto), movementForm.moneda);
+} else if (movementType === "ingreso" && movementForm.cuentaDestino) {
+  await actualizarSaldosCuentas(null, movementForm.cuentaDestino, parseMonto(movementForm.monto), movementForm.moneda);
 }
 
 await reloadTransactions();
