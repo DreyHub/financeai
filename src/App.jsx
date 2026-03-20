@@ -730,6 +730,10 @@ export default function App() {
   const [editCardForm, setEditCardForm] = useState({ rowIndex: -1, tarjeta: "", nombre: "", corte: "", pago: "", notas: "" });
   const cycleStartDay = configData.cycleStartDay;
   const [editingCategory, setEditingCategory] = useState(null);
+  const [showTasaCeroModal, setShowTasaCeroModal] = useState(false);
+  const [tasaCeroTxn, setTasaCeroTxn] = useState(null);
+  const [tasaCeroForm, setTasaCeroForm] = useState({ entidad: "", cuotas: "", tasa: "0", notas: "" });
+
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -1129,6 +1133,80 @@ await reloadAccounts();
   }
 }
 
+async function handleConvertirTasaCero() {
+  if (!hasValidToken() || !sheetId || !tasaCeroTxn) return;
+  if (!tasaCeroForm.entidad || !tasaCeroForm.cuotas) return;
+
+  const cuotas = parseInt(tasaCeroForm.cuotas);
+  const montoTotal = tasaCeroTxn.monto;
+  const cuotaMensual = Math.round(montoTotal / cuotas);
+  const saldoRestante = montoTotal - cuotaMensual;
+
+  try {
+    setLoading(true);
+    setSetupStatus("Convirtiendo a Tasa 0...");
+
+    // 1. Actualizar el monto del movimiento original a la primera cuota
+    const txnRows = await fetchSheetData(sheetId, CONFIG.TABS.transacciones, auth.token);
+    const txnMap = buildHeaderMap(txnRows);
+    const montoIdx = txnMap[normalizeHeader("Monto")] ?? 5;
+    const notasIdx = txnMap[normalizeHeader("Notas")] ?? 13;
+
+    const rowIndex = txnRows.findIndex((r, i) => {
+      if (i === 0) return false;
+      return String(r[0] || "").split(" ")[0] === tasaCeroTxn.fecha &&
+        String(r[1] || "") === tasaCeroTxn.hora &&
+        String(r[2] || "") === tasaCeroTxn.comercio;
+    });
+
+    if (rowIndex !== -1) {
+      const sheetRow = rowIndex + 1;
+      const montoCol = String.fromCharCode(64 + montoIdx + 1);
+      const notasCol = String.fromCharCode(64 + notasIdx + 1);
+
+      // Actualizar monto a primera cuota
+      await gFetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${CONFIG.TABS.transacciones}!${montoCol}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+        auth.token,
+        { method: "PUT", body: JSON.stringify({ values: [[cuotaMensual]] }) }
+      );
+
+      // Actualizar notas
+      await gFetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${CONFIG.TABS.transacciones}!${notasCol}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+        auth.token,
+        { method: "PUT", body: JSON.stringify({ values: [[`Tasa 0 - Cuota 1/${cuotas} · Original: ${fmtCRC(montoTotal)}`]] }) }
+      );
+    }
+
+    // 2. Crear préstamo en tab Préstamos
+    await appendRow(sheetId, CONFIG.TABS.prestamos, [
+      `PRE-TASA0-${Date.now()}`,
+      `Tasa 0 · ${tasaCeroTxn.comercio}`,
+      tasaCeroForm.entidad,
+      tasaCeroTxn.moneda,
+      montoTotal,
+      saldoRestante,
+      cuotaMensual,
+      parseFloat(tasaCeroForm.tasa) || 0,
+      cuotas - 1,
+      tasaCeroForm.notas || `Diferido desde ${tasaCeroTxn.fecha}`,
+    ], auth.token);
+
+    await reloadTransactions();
+    await reloadDebts();
+    setShowTasaCeroModal(false);
+    setTasaCeroTxn(null);
+    setTasaCeroForm({ entidad: "", cuotas: "", tasa: "0", notas: "" });
+
+  } catch (e) {
+    setError(`Error al convertir a Tasa 0: ${e.message}`);
+  } finally {
+    setLoading(false);
+    setSetupStatus("");
+  }
+}
+
 async function actualizarSaldosCuentas(cuentaOrigen, cuentaDestino, monto, moneda) {
   const rows = await fetchSheetData(sheetId, CONFIG.TABS.cuentas, auth.token);
   if (rows.length < 2) return;
@@ -1454,7 +1532,7 @@ const categories = useMemo(() => {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "rgba(255,255,255,0.02)" }}>
-                      {["Fecha", "Comercio", "Tarjeta", "Corte", "Tipo", "Categoría", "Origen", "Destino", "Moneda", "Monto", "Ciclo"].map((h) => (
+                      {["Fecha","Comercio","Tarjeta","Corte","Tipo","Categoría","Origen","Destino","Moneda","Monto","Tasa 0","Ciclo"].map((h) => (
                         <th key={h} style={{ padding: "0.75rem 1rem", textAlign: h === "Monto" ? "right" : "left", fontSize: 11, color: T.muted, fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500, borderBottom: `1px solid ${T.border}`, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -1501,6 +1579,16 @@ const categories = useMemo(() => {
                           <td style={tableCellMono}>{t.cuentaDestino || "—"}</td>
                           <td style={tableCellMono}>{t.moneda}</td>
                           <td style={{ ...tableCellMono, textAlign: "right", fontWeight: 600, color: typeMeta.color }}>{t.moneda === "CRC" ? fmtCRC(t.monto) : fmtUSD(t.monto)}</td>
+                          <td style={{ padding: "0.85rem 1rem" }}>
+  {t.tipo === "gasto" && !isDemo && (
+    <button
+      onClick={() => { setTasaCeroTxn(t); setShowTasaCeroModal(true); }}
+      style={{ background: "rgba(155,127,255,0.1)", border: `1px solid ${T.violet}40`, color: T.violet, borderRadius: 8, padding: "0.3rem 0.65rem", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}
+    >
+      Tasa 0
+    </button>
+  )}
+</td>
                           <td style={{ ...tableCellMono, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={t.ciclo}>{t.ciclo || "—"}</td>
                         </tr>
                       );
@@ -1857,6 +1945,63 @@ const categories = useMemo(() => {
         ))}
       </div>
       <button onClick={() => setEditingCategory(null)} style={cancelButtonStyle}>Cancelar</button>
+    </div>
+  </div>
+)}
+
+{showTasaCeroModal && tasaCeroTxn && (
+  <div style={modalBackdropStyle} onClick={(e) => e.target === e.currentTarget && setShowTasaCeroModal(false)}>
+    <div style={modalCardStyle(isMobile)}>
+      <div style={modalTitleStyle}>Convertir a Tasa 0</div>
+
+      <div style={{ background: T.violetDim || "rgba(155,127,255,0.1)", border: `1px solid ${T.violet}30`, borderRadius: 10, padding: "0.85rem 1rem", marginBottom: "1rem" }}>
+        <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{tasaCeroTxn.comercio}</div>
+        <div style={{ fontSize: 12, color: T.muted2, marginTop: 4 }}>Monto original: {fmtCRC(tasaCeroTxn.monto)}</div>
+      </div>
+
+      {[
+        { key: "entidad", label: "Entidad", placeholder: "Ej: DAVIbank" },
+        { key: "cuotas", label: "Número de cuotas", placeholder: "Ej: 3", type: "number" },
+        { key: "tasa", label: "Tasa de interés (%)", placeholder: "0", type: "number" },
+        { key: "notas", label: "Notas (opcional)", placeholder: "Detalle adicional" },
+      ].map(({ key, label, placeholder, type }) => (
+        <div key={key} style={{ marginBottom: "1rem" }}>
+          <label style={fieldLabelStyle}>{label}</label>
+          <input
+            type={type || "text"}
+            value={tasaCeroForm[key]}
+            onChange={(e) => setTasaCeroForm((f) => ({ ...f, [key]: e.target.value }))}
+            placeholder={placeholder}
+            style={fieldInputStyle}
+          />
+        </div>
+      ))}
+
+      {tasaCeroForm.cuotas && parseInt(tasaCeroForm.cuotas) > 0 && (
+        <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: 12, padding: "0.85rem 1rem", marginBottom: "1rem" }}>
+          <div style={{ fontSize: 11, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>PREVIEW</div>
+          <div style={{ fontSize: 12, color: T.text, marginBottom: 4 }}>
+            Primera cuota: <span style={{ color: T.emerald }}>{fmtCRC(Math.round(tasaCeroTxn.monto / parseInt(tasaCeroForm.cuotas)))}</span>
+          </div>
+          <div style={{ fontSize: 12, color: T.text, marginBottom: 4 }}>
+            Saldo como préstamo: <span style={{ color: T.rose }}>{fmtCRC(tasaCeroTxn.monto - Math.round(tasaCeroTxn.monto / parseInt(tasaCeroForm.cuotas)))}</span>
+          </div>
+          <div style={{ fontSize: 12, color: T.text }}>
+            Cuotas restantes: <span style={{ color: T.amber }}>{parseInt(tasaCeroForm.cuotas) - 1} meses</span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "0.75rem", flexDirection: isMobile ? "column" : "row" }}>
+        <button onClick={() => setShowTasaCeroModal(false)} style={cancelButtonStyle}>Cancelar</button>
+        <button
+          onClick={handleConvertirTasaCero}
+          disabled={!tasaCeroForm.entidad || !tasaCeroForm.cuotas}
+          style={primaryButtonStyle(!!tasaCeroForm.entidad && !!tasaCeroForm.cuotas)}
+        >
+          Convertir →
+        </button>
+      </div>
     </div>
   </div>
 )}
