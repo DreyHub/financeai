@@ -733,7 +733,7 @@ export default function App() {
   const [showTasaCeroModal, setShowTasaCeroModal] = useState(false);
   const [tasaCeroTxn, setTasaCeroTxn] = useState(null);
   const [tasaCeroForm, setTasaCeroForm] = useState({ entidad: "", cuotas: "", tasa: "0", notas: "" });
-
+  const [selectedDebt, setSelectedDebt] = useState(null);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -991,6 +991,9 @@ if (movementType === "transferencia" && movementForm.cuentaOrigen && movementFor
   await actualizarSaldosCuentas(movementForm.cuentaOrigen, null, parseMonto(movementForm.monto), movementForm.moneda);
 } else if (movementType === "ingreso" && movementForm.cuentaDestino) {
   await actualizarSaldosCuentas(null, movementForm.cuentaDestino, parseMonto(movementForm.monto), movementForm.moneda);
+}  else if (movementType === "pago_deuda" && movementForm.cuentaOrigen && selectedDebt) {
+  await actualizarSaldosCuentas(movementForm.cuentaOrigen, null, parseMonto(movementForm.monto), movementForm.moneda);
+  await actualizarSaldoDeuda(selectedDebt, parseMonto(movementForm.monto));
 }
 
 await reloadTransactions();
@@ -998,6 +1001,7 @@ await reloadAccounts();
       setShowMovementModal(false);
       setMovementType("gasto");
       setMovementForm({ comercio: "", monto: "", moneda: "CRC", tarjeta: "", cuentaOrigen: "", cuentaDestino: "", notas: "" });
+      setSelectedDebt(null);
     } catch (e) {
       setError(`Error al registrar movimiento: ${e.message}`);
     } finally {
@@ -1244,6 +1248,34 @@ async function actualizarSaldosCuentas(cuentaOrigen, cuentaDestino, monto, moned
       { method: "PUT", body: JSON.stringify({ values: [[Number(update.value.toFixed(2))]] }) }
     );
   }
+}
+
+async function actualizarSaldoDeuda(deuda, montoPagado) {
+  const rows = await fetchSheetData(sheetId, CONFIG.TABS.prestamos, auth.token);
+  const map = buildHeaderMap(rows);
+  const nombreIdx = map[normalizeHeader("Nombre")] ?? 1;
+  const saldoIdx = map[normalizeHeader("Saldo Actual")] ?? 5;
+  const plazoIdx = map[normalizeHeader("Plazo Restante (meses)")] ?? 8;
+
+  const rowIndex = rows.findIndex((r, i) => i > 0 && String(r[nombreIdx] || "").trim() === deuda.nombre.trim());
+  if (rowIndex === -1) return;
+
+  const sheetRow = rowIndex + 1;
+  const saldoActual = parseMonto(rows[rowIndex][saldoIdx]);
+  const plazoActual = parseInt(rows[rowIndex][plazoIdx] || "0");
+  const nuevoSaldo = Math.max(0, saldoActual - montoPagado);
+  const nuevoPlazo = Math.max(0, plazoActual - 1);
+
+  const saldoCol = String.fromCharCode(64 + saldoIdx + 1);
+  const plazoCol = String.fromCharCode(64 + plazoIdx + 1);
+
+  await gFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${CONFIG.TABS.prestamos}!${saldoCol}${sheetRow}:${plazoCol}${sheetRow}`)}?valueInputOption=USER_ENTERED`,
+    auth.token,
+    { method: "PUT", body: JSON.stringify({ values: [[nuevoSaldo, nuevoPlazo]] }) }
+  );
+
+  await reloadDebts();
 }
 
   async function handleGuardarCategoria(txn, categoria) {
@@ -1768,6 +1800,27 @@ const categories = useMemo(() => {
             </div>
             <div style={{ marginBottom: "1rem" }}><label style={fieldLabelStyle}>Comercio / Descripción</label><input type="text" value={movementForm.comercio} onChange={(e) => setMovementForm((f) => ({ ...f, comercio: e.target.value }))} placeholder={movementType === "transferencia" ? "Ej: Transferencia a ahorro" : "Ej: Super Buena Suerte"} style={fieldInputStyle} /></div>
             <div style={{ marginBottom: "1rem" }}><label style={fieldLabelStyle}>Monto</label><input type="number" value={movementForm.monto} onChange={(e) => setMovementForm((f) => ({ ...f, monto: e.target.value }))} placeholder="Ej: 5000" style={fieldInputStyle} /></div>
+{movementType === "pago_deuda" && (
+  <div style={{ marginBottom: "1rem" }}>
+    <label style={fieldLabelStyle}>Deuda a pagar</label>
+    <select
+      value={selectedDebt ? selectedDebt.nombre : ""}
+      onChange={(e) => {
+        const debt = deudasData.find(d => d.nombre === e.target.value);
+        setSelectedDebt(debt || null);
+        if (debt) setMovementForm(f => ({ ...f, comercio: debt.nombre, monto: debt.cuota }));
+      }}
+      style={{ ...fieldInputStyle, cursor: "pointer" }}
+    >
+      <option value="">Seleccioná una deuda...</option>
+      {deudasData.map((d) => (
+        <option key={d.nombre} value={d.nombre}>
+          {d.nombre} — {d.moneda === "CRC" ? fmtCRC(d.cuota) : fmtUSD(d.cuota)}/mes
+        </option>
+      ))}
+    </select>
+  </div>
+)}
             {movementType !== "transferencia" && <div style={{ marginBottom: "1rem" }}><label style={fieldLabelStyle}>Tarjeta (últimos 4 o nombre)</label><input list="financeai-card-options" value={movementForm.tarjeta} onChange={(e) => setMovementForm((f) => ({ ...f, tarjeta: e.target.value }))} placeholder="Ej: 4006" style={fieldInputStyle} /><datalist id="financeai-card-options">{tarjetasData.map((card) => <option key={card.tarjeta} value={getTarjetaDisplay(card)} />)}</datalist></div>}
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "0.85rem", marginBottom: "1rem" }}>
               <div><label style={fieldLabelStyle}>Cuenta origen</label><input list="financeai-account-options" value={movementForm.cuentaOrigen} onChange={(e) => setMovementForm((f) => ({ ...f, cuentaOrigen: e.target.value }))} placeholder="Ej: Davibank Colones" style={fieldInputStyle} /></div>
