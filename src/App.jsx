@@ -954,6 +954,10 @@ export default function App() {
       setError("Faltan datos del movimiento.");
       return;
     }
+if (movementType === "pago_deuda" && !selectedDebt) {
+  setError("Seleccioná una deuda para pagar.");
+  return;
+}
     if (movementType === "transferencia") {
       if (!movementForm.cuentaOrigen || !movementForm.cuentaDestino) {
         setError("Para una transferencia ocupás cuenta origen y cuenta destino.");
